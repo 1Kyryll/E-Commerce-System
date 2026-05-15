@@ -13,7 +13,7 @@
 
 This is a learning only project, it is created specifically to nail concepts and goals listed below: 
 
-- **CI/CD** pipeline - learn modern production deploying and integration pipeline automation techniques. 
+- **CI/CD pipeline** - learn modern production deploying and integration pipeline automation techniques. 
 - **Cloud** - deploy and manage app in the public cloud.
 - **Observability** - learn to use modern stack for monitoring Telemetry data and identifying bottlenecks within an application.   
 - **Load Testing** - load test an entire application with fake users and their behavioral patterns, see where the system breaks at a large scale.
