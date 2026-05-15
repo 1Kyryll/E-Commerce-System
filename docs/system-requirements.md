@@ -9,7 +9,7 @@
     - Cart is saved *until* the auth session is expired
 - User can purchase a product
 
-### Goals 
+### Personal Goals 
 
 This is a learning only project, it is created specifically to nail concepts and goals listed below: 
 

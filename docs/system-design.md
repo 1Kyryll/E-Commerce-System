@@ -1,6 +1,6 @@
-# Purchase Flow - Diagrams & High-Level Overview
+# System Design 
 
-This document overviews the purchase flow of this learning-oriented e-commerce system demo, it is an introduction the core [system logic design](https://github.com/1Kyryll/main/docs/adr/decisions-and-tradeoffs) and decisions taken in the process of creating it. 
+This document present the high overview system design of an application. This system ensures it can handle a real-world scenarios with a great deal of users traffic and a projected workload on the database. System is designed to face and effectively handle such concerns as: eventual consistency, partial failure, concurrency, with explicit and premeditated choices rather than accidental ones. 
 
 ## Overview 
 
@@ -12,7 +12,7 @@ The patterns ensure this application's logic:
 2) **Time-bound reservations** to hold stock during the payment window without blocking other users. 
 3) **The transactional outbox pattern** to fan out events to downstream services(email. analytics, recommendations) without the dual-write problem. 
 
-Every other decision comes out of these three main concepts. 
+Every other decision listed in the `adr` directory comes out of these three main concepts. 
 
 ## High-Level Architecture
 
