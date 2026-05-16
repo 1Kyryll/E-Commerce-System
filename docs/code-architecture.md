@@ -104,6 +104,36 @@ ecommerce-demo/
 │   │   └── types.ts                    # Generated from openapi.yaml
 │   └── public/
 │
+├── observability/                      # everything Grafana stack needs
+│   ├── docker-compose.yml              # otel-collector, loki, prometheus, tempo, grafana
+│   ├── otel-collector-config.yaml
+│   ├── prometheus.yml
+│   ├── loki-config.yml
+│   ├── tempo-config.yaml
+│   └── grafana/
+│       ├── provisioning/
+│       │   ├── datasources/datasources.yml
+│       │   └── dashboards/dashboards.yml
+│       └── dashboards/
+│           ├── service-overview.json
+│           └── k6-load-test.json
+│
+├── load-tests/                         # k6 scripts
+│   ├── smoke.js                        # 30s, 10 VUs — runs in CI on every deploy
+│   ├── browse.js                       # browsing pattern
+│   ├── checkout.js                     # full purchase flow
+│   ├── soak.js                         # long-running stability
+│   └── lib/
+│       ├── helpers.js                  # auth, random product picker
+│       └── thresholds.js               # SLO definitions
+│
+├── deploy/                             # infra-as-something
+│   ├── docker-compose.prod.yml         # what runs on the Hetzner box
+│   ├── Caddyfile                       # TLS + reverse proxy
+│   └── scripts/
+│       ├── bootstrap.sh                # one-shot server setup
+│       └── backup-db.sh
+│
 └── docs/
     ├── system-requirements.md          # What the system must do
     ├── system-design.md                # High-level architecture
