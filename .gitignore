@@ -1,0 +1,21 @@
+# Go
+backend/gen/
+*.exe
+*.test
+*.out
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/lib/types.ts
+
+# Env
+.env
+.env.local
+*.env
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
