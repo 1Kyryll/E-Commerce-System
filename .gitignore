@@ -20,3 +20,4 @@ frontend/lib/types.ts
 .idea/
 .vscode/
 .claude/ 
+.codegraph/
