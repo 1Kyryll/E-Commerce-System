@@ -19,3 +19,4 @@ frontend/lib/types.ts
 .DS_Store
 .idea/
 .vscode/
+.claude/ 
