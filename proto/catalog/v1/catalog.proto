@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package catalog.v1;
+
+option go_package = "github.com/1Kyryll/ecommerce-demo/backend/gen/proto/catalog/v1;catalogv1";
+
+import "google/protobuf/timestamp.proto";
+
+service CatalogService {
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+}
+
+message Money {
+  // Decimal amount as a canonical string (e.g. "19.9900"). Native NUMERIC over the wire.
+  string amount = 1;
+  // ISO 4217 currency code.
+  string currency = 2;
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  Money price = 3;
+  int32 inventory_available = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message ListProductsRequest {
+  // Opaque cursor returned by a previous ListProducts response. Empty on first page.
+  string page_cursor = 1;
+  // Max items per page. Server may clamp.
+  int32 page_size = 2;
+}
+
+message ListProductsResponse {
+  repeated Product products = 1;
+  // Cursor for the next page. Empty when there are no more pages.
+  string next_page_cursor = 2;
+}
+
+message GetProductRequest {
+  string id = 1;
+}
+
+message GetProductResponse {
+  Product product = 1;
+}

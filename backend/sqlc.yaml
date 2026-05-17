@@ -1,0 +1,54 @@
+version: "2"
+sql:
+  - engine: postgresql
+    queries: queries/catalog
+    schema: migrations
+    gen:
+      go:
+        package: catalogdb
+        out: gen/db/catalog
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+
+  - engine: postgresql
+    queries: queries/cart
+    schema: migrations
+    gen:
+      go:
+        package: cartdb
+        out: gen/db/cart
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+
+  - engine: postgresql
+    queries: queries/order
+    schema: migrations
+    gen:
+      go:
+        package: orderdb
+        out: gen/db/order
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
