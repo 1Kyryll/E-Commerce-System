@@ -50,3 +50,7 @@ func GetUserID(ctx context.Context) (uuid.UUID, bool) {
 	v, ok := ctx.Value(userIDKey).(uuid.UUID)
 	return v, ok
 }
+
+// UserIDContextKey returns the context key used for the authenticated user
+// id. Exposed for tests that need to inject a uid bypassing the middleware.
+func UserIDContextKey() any { return userIDKey }
