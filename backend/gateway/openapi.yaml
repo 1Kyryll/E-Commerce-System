@@ -1,0 +1,40 @@
+openapi: 3.1.0
+info:
+  title: E-Commerce Gateway
+  version: 0.1.0
+  description: |
+    REST gateway in front of the internal gRPC services. The frontend talks to
+    this binary; this binary translates to gRPC against catalog/cart/order.
+
+    Only /healthz is documented today. Business endpoints will be added as the
+    backing services come online.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: |
+        Returns 200 OK if the gateway process is alive. Makes no downstream
+        calls. Readiness checks (DB / gRPC dependencies) will land on a
+        separate /readyz endpoint when those dependencies exist.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
