@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
+	"github.com/1Kyryll/ecommerce-demo/backend/gateway"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/config"
 )
 
@@ -18,5 +25,19 @@ func main() {
 		log.Fatalf("gateway: config: %v", err)
 	}
 
-	fmt.Printf("gateway: config loaded (grpc=:%d http=:%d)\n", cfg.GRPCPort, cfg.HTTPPort)
+	// Default to text-format slog at debug for local dev. JSON / Info is the
+	// production handler; that switch lives in a future observability plan.
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	addr := fmt.Sprintf(":%d", cfg.HTTPPort)
+	srv := gateway.NewServer(gateway.NewRouter())
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	slog.Info("gateway starting", "addr", addr, "grpc_port", cfg.GRPCPort)
+	if err := srv.ListenAndServe(ctx, addr, 5*time.Second); err != nil {
+		log.Fatalf("gateway: serve: %v", err)
+	}
+	slog.Info("gateway stopped cleanly")
 }
