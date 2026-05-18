@@ -1,13 +1,11 @@
 openapi: 3.1.0
 info:
   title: E-Commerce Gateway
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    REST gateway in front of the internal gRPC services. The frontend talks to
-    this binary; this binary translates to gRPC against catalog/cart/order.
-
-    Only /healthz is documented today. Business endpoints will be added as the
-    backing services come online.
+    REST gateway in front of the internal gRPC services. Auth is implemented
+    here directly (signup / login / logout / /me); business endpoints land
+    as the backing services come online.
 
 servers:
   - url: http://localhost:8000
@@ -17,10 +15,6 @@ paths:
   /healthz:
     get:
       summary: Liveness probe
-      description: |
-        Returns 200 OK if the gateway process is alive. Makes no downstream
-        calls. Readiness checks (DB / gRPC dependencies) will land on a
-        separate /readyz endpoint when those dependencies exist.
       responses:
         '200':
           description: OK
@@ -29,7 +23,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
 
+  /auth/signup:
+    post:
+      summary: Create a new user account and sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Created. Sets a session cookie.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                description: HttpOnly session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid request body or missing fields.
+        '409':
+          description: Email already in use.
+
+  /auth/login:
+    post:
+      summary: Authenticate an existing user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK. Sets a session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials.
+
+  /auth/logout:
+    post:
+      summary: Clear the session cookie
+      responses:
+        '204':
+          description: No content.
+
+  /me:
+    get:
+      summary: Currently authenticated user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid session.
+
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+
   schemas:
     HealthStatus:
       type: object
@@ -38,3 +105,39 @@ components:
         status:
           type: string
           enum: [ok]
+
+    SignupRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    User:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
