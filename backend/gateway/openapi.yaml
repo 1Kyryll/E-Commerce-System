@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: E-Commerce Gateway
-  version: 0.3.0
+  version: 0.4.0
   description: |
     REST gateway in front of the internal gRPC services. Auth is implemented
-    here directly (signup / login / logout / /me); product browsing is
-    forwarded to the catalog gRPC service.
+    here directly (signup / login / logout / /me); product browsing forwards
+    to the catalog gRPC service; cart operations forward to the cart gRPC
+    service.
 
 servers:
   - url: http://localhost:8000
@@ -82,6 +83,77 @@ paths:
         '502':
           description: Upstream catalog service unavailable.
 
+  /cart:
+    get:
+      summary: Get the authenticated user's cart
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: OK. Returns an empty cart with `id` of all zeros when the user has no cart yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '401':
+          description: Missing or invalid session.
+    delete:
+      summary: Clear the authenticated user's cart
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: No content.
+        '401':
+          description: Missing or invalid session.
+
+  /cart/items:
+    post:
+      summary: Add an item to the cart (cumulative — quantity is added to any existing line)
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItemRequest'
+      responses:
+        '200':
+          description: OK. Returns the updated cart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: Malformed JSON or invalid quantity.
+        '401':
+          description: Missing or invalid session.
+        '404':
+          description: Product not found.
+
+  /cart/items/{product_id}:
+    delete:
+      summary: Remove a product line from the cart
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK. Returns the updated cart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '401':
+          description: Missing or invalid session.
+
   /auth/signup:
     post:
       summary: Create a new user account and sign in
@@ -157,6 +229,50 @@ components:
       name: session
 
   schemas:
+    AddCartItemRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Quantity to add to any existing line; cumulative.
+
+    Cart:
+      type: object
+      required: [id, user_id, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: All-zero UUID (00000000-0000-0000-0000-000000000000) when no cart row exists yet.
+        user_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+
+    CartItem:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        added_at:
+          type: string
+          format: date-time
+
     HealthStatus:
       type: object
       required: [status]

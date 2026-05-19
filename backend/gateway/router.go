@@ -9,11 +9,10 @@ import (
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/middleware"
 )
 
-// Deps bundles the wiring NewRouter needs. main constructs this; the router
-// itself stays unaware of how each dependency was built.
 type Deps struct {
 	AuthSvc       *auth.Service
 	ProductsH     *handlers.ProductHandlers
+	CartH         *handlers.CartHandlers
 	SessionTTL    time.Duration
 	SecureCookies bool
 }
@@ -29,7 +28,6 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /auth/login", authH.Login)
 	mux.HandleFunc("POST /auth/logout", authH.Logout)
 
-	// Public product browsing.
 	mux.HandleFunc("GET /products", d.ProductsH.List)
 	mux.HandleFunc("GET /products/{id}", d.ProductsH.Get)
 
@@ -37,6 +35,10 @@ func NewRouter(d Deps) http.Handler {
 	meH := handlers.NewMeHandlers(d.AuthSvc)
 	protect := middleware.Auth(d.AuthSvc)
 	mux.Handle("GET /me", protect(http.HandlerFunc(meH.Get)))
+	mux.Handle("GET /cart", protect(http.HandlerFunc(d.CartH.Get)))
+	mux.Handle("POST /cart/items", protect(http.HandlerFunc(d.CartH.AddItem)))
+	mux.Handle("DELETE /cart/items/{product_id}", protect(http.HandlerFunc(d.CartH.RemoveItem)))
+	mux.Handle("DELETE /cart", protect(http.HandlerFunc(d.CartH.Clear)))
 
 	return middleware.Recovery(middleware.RequestID(mux))
 }
