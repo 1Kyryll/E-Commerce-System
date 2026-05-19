@@ -10,9 +10,10 @@ import (
 )
 
 // Deps bundles the wiring NewRouter needs. main constructs this; the router
-// itself stays unaware of how Service was built.
+// itself stays unaware of how each dependency was built.
 type Deps struct {
 	AuthSvc       *auth.Service
+	ProductsH     *handlers.ProductHandlers
 	SessionTTL    time.Duration
 	SecureCookies bool
 }
@@ -28,8 +29,11 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("POST /auth/login", authH.Login)
 	mux.HandleFunc("POST /auth/logout", authH.Logout)
 
-	// Protected routes. mux.Handle takes an http.Handler so we wrap each
-	// protected HandlerFunc in Auth.
+	// Public product browsing.
+	mux.HandleFunc("GET /products", d.ProductsH.List)
+	mux.HandleFunc("GET /products/{id}", d.ProductsH.Get)
+
+	// Protected routes.
 	meH := handlers.NewMeHandlers(d.AuthSvc)
 	protect := middleware.Auth(d.AuthSvc)
 	mux.Handle("GET /me", protect(http.HandlerFunc(meH.Get)))

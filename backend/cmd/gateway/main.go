@@ -14,6 +14,8 @@ import (
 
 	"github.com/1Kyryll/ecommerce-demo/backend/gateway"
 	"github.com/1Kyryll/ecommerce-demo/backend/gateway/auth"
+	"github.com/1Kyryll/ecommerce-demo/backend/gateway/clients"
+	"github.com/1Kyryll/ecommerce-demo/backend/gateway/handlers"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/config"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/database"
 )
@@ -38,10 +40,23 @@ func main() {
 	defer pool.Close()
 
 	authSvc := auth.NewService(auth.NewRepo(pool), cfg.JWTSecret, cfg.JWTTTL)
+
+	catalogAddr := os.Getenv("CATALOG_ADDR")
+	if catalogAddr == "" {
+		catalogAddr = "localhost:9000"
+	}
+	catalogClient, err := clients.DialCatalog(catalogAddr)
+	if err != nil {
+		log.Fatalf("gateway: catalog client: %v", err)
+	}
+	defer catalogClient.Close()
+
+	productsH := handlers.NewProductHandlers(catalogClient.Client)
 	secureCookies := os.Getenv("APP_ENV") == "production"
 
 	router := gateway.NewRouter(gateway.Deps{
 		AuthSvc:       authSvc,
+		ProductsH:     productsH,
 		SessionTTL:    cfg.JWTTTL,
 		SecureCookies: secureCookies,
 	})
@@ -49,7 +64,7 @@ func main() {
 	addr := fmt.Sprintf(":%d", cfg.HTTPPort)
 	srv := gateway.NewServer(router)
 
-	slog.Info("gateway starting", "addr", addr, "secure_cookies", secureCookies)
+	slog.Info("gateway starting", "addr", addr, "catalog_addr", catalogAddr, "secure_cookies", secureCookies)
 	if err := srv.ListenAndServe(ctx, addr, 5*time.Second); err != nil {
 		log.Fatalf("gateway: serve: %v", err)
 	}
