@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: E-Commerce Gateway
-  version: 0.2.0
+  version: 0.3.0
   description: |
     REST gateway in front of the internal gRPC services. Auth is implemented
-    here directly (signup / login / logout / /me); business endpoints land
-    as the backing services come online.
+    here directly (signup / login / logout / /me); product browsing is
+    forwarded to the catalog gRPC service.
 
 servers:
   - url: http://localhost:8000
@@ -22,6 +22,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
+
+  /products:
+    get:
+      summary: List products with cursor pagination
+      description: |
+        Returns a page of products in newest-first order. Use `cursor` from a
+        previous response's `next_page_cursor` to fetch the next page. The
+        cursor is opaque — clients should not try to construct one.
+        `page_size` defaults to 20 and is clamped to 100 by the upstream
+        catalog service.
+      parameters:
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Opaque pagination cursor. Omit on the first page.
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+          description: Max products per page.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+        '400':
+          description: Malformed query parameter.
+        '502':
+          description: Upstream catalog service unavailable.
+
+  /products/{id}:
+    get:
+      summary: Fetch a single product by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Malformed product id.
+        '404':
+          description: No product with that id.
+        '502':
+          description: Upstream catalog service unavailable.
 
   /auth/signup:
     post:
@@ -105,6 +164,53 @@ components:
         status:
           type: string
           enum: [ok]
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          description: Decimal amount as a canonical string (e.g. "19.9900").
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code.
+
+    Product:
+      type: object
+      required: [id, name, price, inventory_available]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        inventory_available:
+          type: integer
+          format: int32
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductList:
+      type: object
+      required: [products, next_page_cursor]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        next_page_cursor:
+          type: string
+          description: Empty string when no more pages exist.
 
     SignupRequest:
       type: object
