@@ -34,12 +34,33 @@ type CreateReservationParams struct {
 	Quantity       int32
 }
 
-// CreateReservation runs the atomic decrement-and-insert CTE. Returns:
-//   - new reservation on happy path
-//   - existing reservation on idempotency_key collision (23505)
-//   - domain.ErrInsufficientInventory if CTE produced no rows
-//   - domain.ErrProductNotFound on FK violation (23503)
+// CreateReservation runs the atomic decrement-and-insert CTE behind a
+// pre-check that disambiguates the three failure modes the CTE alone cannot
+// tell apart (all of them collapse to pgx.ErrNoRows):
+//
+//  1. idempotency replay  -> ExistingReservationID is non-nil; we fetch and
+//                            return the existing reservation.
+//  2. product missing     -> ProductExists is false; we return ErrProductNotFound.
+//  3. insufficient stock  -> only reachable case where the CTE returns ErrNoRows.
+//
+// The 23505 / 23503 branches remain as race-condition fallbacks: a concurrent
+// caller could create with the same key after our pre-check, or the product
+// could be deleted between the check and the CTE.
 func (r *Repo) CreateReservation(ctx context.Context, p CreateReservationParams) (domain.Reservation, error) {
+	pre, err := r.queries.CheckReservationPreconditions(ctx, orderdb.CheckReservationPreconditionsParams{
+		ID:             p.ProductID,
+		IdempotencyKey: p.IdempotencyKey,
+	})
+	if err != nil {
+		return domain.Reservation{}, fmt.Errorf("check reservation preconditions: %w", err)
+	}
+	if pre.ExistingReservationID != uuid.Nil {
+		return r.GetByIdempotencyKey(ctx, p.IdempotencyKey)
+	}
+	if !pre.ProductExists {
+		return domain.Reservation{}, domain.ErrProductNotFound
+	}
+
 	row, err := r.queries.DecrementInventoryAndCreateReservation(ctx, orderdb.DecrementInventoryAndCreateReservationParams{
 		Quantity:       p.Quantity,
 		ProductID:      p.ProductID,
@@ -55,15 +76,14 @@ func (r *Repo) CreateReservation(ctx context.Context, p CreateReservationParams)
 		return domain.Reservation{}, domain.ErrInsufficientInventory
 	}
 
+	// 23505: race where a concurrent caller created with the same
+	// idempotency_key between our pre-check and the CTE. Refetch and return
+	// the existing reservation so the API stays idempotent under contention.
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case "23505":
-			return r.GetByIdempotencyKey(ctx, p.IdempotencyKey)
-		case "23503":
-			return domain.Reservation{}, domain.ErrProductNotFound
-		}
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return r.GetByIdempotencyKey(ctx, p.IdempotencyKey)
 	}
+
 	return domain.Reservation{}, fmt.Errorf("create reservation: %w", err)
 }
 

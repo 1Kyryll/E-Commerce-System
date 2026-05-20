@@ -54,3 +54,19 @@ SELECT id, idempotency_key, product_id, user_id, quantity,
        status, expires_at, created_at, consumed_at, released_at
   FROM reservations
  WHERE idempotency_key = $1;
+
+-- name: CheckReservationPreconditions :one
+-- Looks up an existing reservation by idempotency_key and checks whether
+-- the product exists. The repo uses this BEFORE DecrementInventoryAndCreateReservation
+-- to disambiguate the three failure modes that all otherwise collapse to
+-- the atomic CTE returning pgx.ErrNoRows:
+--   1) product missing       -> product_exists = false
+--   2) idempotency replay    -> existing_reservation_id IS NOT NULL
+--   3) insufficient inventory -> both fields above are "fine", and the
+--                                 follow-up CTE returns ErrNoRows
+SELECT
+  EXISTS(SELECT 1 FROM products WHERE products.id = $1) AS product_exists,
+  COALESCE(
+    (SELECT reservations.id FROM reservations WHERE reservations.idempotency_key = $2),
+    '00000000-0000-0000-0000-000000000000'::uuid
+  )::uuid AS existing_reservation_id;
