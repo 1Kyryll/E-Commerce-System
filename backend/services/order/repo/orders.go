@@ -85,28 +85,38 @@ func (r *Repo) GetOrderByIdempotencyKey(ctx context.Context, key uuid.UUID) (dom
 	return r.GetOrderByID(ctx, row.ID)
 }
 
-// FinalizeOrderParams bundles the inputs to FinalizeOrder. The service has
-// already chosen UUIDs and computed the total.
-type FinalizeOrderParams struct {
-	OrderID           uuid.UUID
-	IdempotencyKey    uuid.UUID
-	UserID            uuid.UUID
-	TotalAmount       decimal.Decimal
-	TotalCurrency     string
+// FinalizeOrderItem is one line being finalized inside FinalizeOrder. The
+// service chooses the IDs and computes unit prices before calling.
+type FinalizeOrderItem struct {
 	OrderItemID       uuid.UUID
 	ReservationID     uuid.UUID
 	ProductID         uuid.UUID
 	Quantity          int32
 	UnitPriceAmount   decimal.Decimal
 	UnitPriceCurrency string
-	OutboxEventID     uuid.UUID
+}
+
+// FinalizeOrderParams bundles the inputs to FinalizeOrder. The service has
+// already chosen UUIDs and computed totals.
+type FinalizeOrderParams struct {
+	OrderID        uuid.UUID
+	IdempotencyKey uuid.UUID
+	UserID         uuid.UUID
+	TotalAmount    decimal.Decimal
+	TotalCurrency  string
+	Items          []FinalizeOrderItem
+	OutboxEventID  uuid.UUID
 }
 
 // FinalizeOrder runs the second transaction from docs/system-design.md:
-// consume the reservation, insert the order + order_item, write the outbox
-// event. All four happen atomically. Returns ErrReservationNotActive if the
-// reservation was no longer 'active' at the moment of consumption.
+// consume every reservation, insert the order + N order_items, write a
+// single outbox event. All inserts happen atomically. Returns
+// ErrReservationNotActive if any reservation was no longer 'active' at
+// the moment of consumption.
 func (r *Repo) FinalizeOrder(ctx context.Context, p FinalizeOrderParams) (domain.Order, error) {
+	if len(p.Items) == 0 {
+		return domain.Order{}, fmt.Errorf("finalize order: no items")
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return domain.Order{}, fmt.Errorf("begin finalize tx: %w", err)
@@ -115,11 +125,13 @@ func (r *Repo) FinalizeOrder(ctx context.Context, p FinalizeOrderParams) (domain
 
 	q := r.queries.WithTx(tx)
 
-	if _, err := q.ConsumeReservationByID(ctx, p.ReservationID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Order{}, domain.ErrReservationNotActive
+	for _, it := range p.Items {
+		if _, err := q.ConsumeReservationByID(ctx, it.ReservationID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.Order{}, domain.ErrReservationNotActive
+			}
+			return domain.Order{}, fmt.Errorf("consume reservation: %w", err)
 		}
-		return domain.Order{}, fmt.Errorf("consume reservation: %w", err)
 	}
 
 	orderRow, err := q.InsertOrder(ctx, orderdb.InsertOrderParams{
@@ -134,26 +146,47 @@ func (r *Repo) FinalizeOrder(ctx context.Context, p FinalizeOrderParams) (domain
 		return domain.Order{}, fmt.Errorf("insert order: %w", err)
 	}
 
-	itemRow, err := q.InsertOrderItem(ctx, orderdb.InsertOrderItemParams{
-		ID:                p.OrderItemID,
-		OrderID:           p.OrderID,
-		ProductID:         p.ProductID,
-		ReservationID:     pgtype.UUID{Bytes: p.ReservationID, Valid: true},
-		Quantity:          p.Quantity,
-		UnitPriceAmount:   decimalToNumeric(p.UnitPriceAmount),
-		UnitPriceCurrency: p.UnitPriceCurrency,
-	})
-	if err != nil {
-		return domain.Order{}, fmt.Errorf("insert order item: %w", err)
+	domainItems := make([]domain.OrderItem, 0, len(p.Items))
+	outboxItems := make([]map[string]any, 0, len(p.Items))
+	for _, it := range p.Items {
+		itemRow, err := q.InsertOrderItem(ctx, orderdb.InsertOrderItemParams{
+			ID:                it.OrderItemID,
+			OrderID:           p.OrderID,
+			ProductID:         it.ProductID,
+			ReservationID:     pgtype.UUID{Bytes: it.ReservationID, Valid: true},
+			Quantity:          it.Quantity,
+			UnitPriceAmount:   decimalToNumeric(it.UnitPriceAmount),
+			UnitPriceCurrency: it.UnitPriceCurrency,
+		})
+		if err != nil {
+			return domain.Order{}, fmt.Errorf("insert order item: %w", err)
+		}
+		itemReservationID := uuid.Nil
+		if itemRow.ReservationID.Valid {
+			itemReservationID = itemRow.ReservationID.Bytes
+		}
+		domainItems = append(domainItems, domain.OrderItem{
+			ID:                itemRow.ID,
+			OrderID:           itemRow.OrderID,
+			ProductID:         itemRow.ProductID,
+			ReservationID:     itemReservationID,
+			Quantity:          itemRow.Quantity,
+			UnitPriceAmount:   numericToDecimal(itemRow.UnitPriceAmount),
+			UnitPriceCurrency: itemRow.UnitPriceCurrency,
+		})
+		outboxItems = append(outboxItems, map[string]any{
+			"product_id": it.ProductID,
+			"quantity":   it.Quantity,
+			"unit_price": it.UnitPriceAmount.String(),
+		})
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"order_id":   p.OrderID,
-		"user_id":    p.UserID,
-		"total":      p.TotalAmount.String(),
-		"currency":   p.TotalCurrency,
-		"product_id": p.ProductID,
-		"quantity":   p.Quantity,
+		"order_id": p.OrderID,
+		"user_id":  p.UserID,
+		"total":    p.TotalAmount.String(),
+		"currency": p.TotalCurrency,
+		"items":    outboxItems,
 	})
 	if err != nil {
 		return domain.Order{}, fmt.Errorf("marshal outbox payload: %w", err)
@@ -173,10 +206,6 @@ func (r *Repo) FinalizeOrder(ctx context.Context, p FinalizeOrderParams) (domain
 		return domain.Order{}, fmt.Errorf("commit finalize tx: %w", err)
 	}
 
-	itemReservationID := uuid.Nil
-	if itemRow.ReservationID.Valid {
-		itemReservationID = itemRow.ReservationID.Bytes
-	}
 	return domain.Order{
 		ID:             orderRow.ID,
 		IdempotencyKey: orderRow.IdempotencyKey,
@@ -186,15 +215,7 @@ func (r *Repo) FinalizeOrder(ctx context.Context, p FinalizeOrderParams) (domain
 		Status:         domain.OrderStatus(orderRow.Status),
 		CreatedAt:      orderRow.CreatedAt.Time,
 		UpdatedAt:      orderRow.UpdatedAt.Time,
-		Items: []domain.OrderItem{{
-			ID:                itemRow.ID,
-			OrderID:           itemRow.OrderID,
-			ProductID:         itemRow.ProductID,
-			ReservationID:     itemReservationID,
-			Quantity:          itemRow.Quantity,
-			UnitPriceAmount:   numericToDecimal(itemRow.UnitPriceAmount),
-			UnitPriceCurrency: itemRow.UnitPriceCurrency,
-		}},
+		Items:          domainItems,
 	}, nil
 }
 
