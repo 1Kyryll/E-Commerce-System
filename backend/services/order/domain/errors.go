@@ -15,16 +15,16 @@ var (
 
 	// ErrInvalidQuantity is returned for quantity < 1. Maps to InvalidArgument.
 	ErrInvalidQuantity = errors.New("quantity must be positive")
+
+	// ErrOrderNotFound is returned by GetOrder when no row matches. Maps to NotFound.
+	ErrOrderNotFound = errors.New("order not found")
+
+	// ErrPaymentDeclined is returned when the payment provider hard-fails the
+	// charge. The reservation has already been released. Maps to FailedPrecondition.
+	ErrPaymentDeclined = errors.New("payment declined")
+
+	// ErrReservationNotActive means the reservation existed but is in a terminal
+	// state ('consumed' or 'released'), so PlaceOrder cannot finalize it. Maps to
+	// FailedPrecondition.
+	ErrReservationNotActive = errors.New("reservation not active")
 )
-
-// ErrOrderNotFound is returned by GetOrder when no row matches. Maps to NotFound.
-var ErrOrderNotFound = errors.New("order not found")
-
-// ErrPaymentDeclined is returned when the payment provider hard-fails the
-// charge. The reservation has already been released. Maps to FailedPrecondition.
-var ErrPaymentDeclined = errors.New("payment declined")
-
-// ErrReservationNotActive means the reservation existed but is in a terminal
-// state ('consumed' or 'released'), so PlaceOrder cannot finalize it. Maps to
-// FailedPrecondition.
-var ErrReservationNotActive = errors.New("reservation not active")
