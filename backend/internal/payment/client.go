@@ -20,6 +20,10 @@ var (
 	// of the docs/system-design failure flow. Not produced by the fake yet —
 	// added so callers can already switch on it.
 	ErrTimeout = errors.New("payment timeout")
+	// ErrInvalidRequest signals a malformed ChargeRequest (zero/negative
+	// amount, missing currency). Callers must NOT release the reservation
+	// or retry as a transient failure — fix the input.
+	ErrInvalidRequest = errors.New("invalid charge request")
 )
 
 type ChargeRequest struct {

@@ -2,7 +2,6 @@ package payment
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -33,7 +32,10 @@ func NewFakeClient() *FakeClient {
 
 func (c *FakeClient) Charge(_ context.Context, req ChargeRequest) (ChargeResult, error) {
 	if req.Amount.IsZero() || req.Amount.IsNegative() {
-		return ChargeResult{}, errors.New("amount must be positive")
+		return ChargeResult{}, fmt.Errorf("amount must be positive: %w", ErrInvalidRequest)
+	}
+	if req.Currency == "" {
+		return ChargeResult{}, fmt.Errorf("currency required: %w", ErrInvalidRequest)
 	}
 
 	c.mu.Lock()

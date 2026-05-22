@@ -86,7 +86,20 @@ func TestFakeClient_Charge_ZeroAmount_Rejected(t *testing.T) {
 		Amount:         decimal.Zero,
 		Currency:       "USD",
 	})
-	if err == nil {
-		t.Errorf("expected error on zero amount")
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("err = %v, want ErrInvalidRequest", err)
+	}
+}
+
+func TestFakeClient_Charge_MissingCurrency_Rejected(t *testing.T) {
+	c := newDeterministicFake(1)
+	c.DeclineRate = 0
+	_, err := c.Charge(context.Background(), ChargeRequest{
+		IdempotencyKey: uuid.New(),
+		Amount:         decimal.RequireFromString("1.00"),
+		Currency:       "",
+	})
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Errorf("err = %v, want ErrInvalidRequest", err)
 	}
 }
