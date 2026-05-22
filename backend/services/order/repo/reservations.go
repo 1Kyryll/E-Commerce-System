@@ -17,11 +17,12 @@ import (
 // Repo wraps the sqlc-generated orderdb.Queries with domain-friendly methods
 // and pg-error mapping.
 type Repo struct {
+	pool    *pgxpool.Pool
 	queries *orderdb.Queries
 }
 
 func NewRepo(pool *pgxpool.Pool) *Repo {
-	return &Repo{queries: orderdb.New(pool)}
+	return &Repo{pool: pool, queries: orderdb.New(pool)}
 }
 
 // CreateReservationParams bundles the input to the atomic CTE. The service
