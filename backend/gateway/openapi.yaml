@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: E-Commerce Gateway
-  version: 0.5.0
+  version: 0.6.0
   description: |
     REST gateway in front of the internal gRPC services. Auth is implemented
     here directly (signup / login / logout / /me); product browsing forwards
@@ -156,12 +156,17 @@ paths:
 
   /checkout:
     post:
-      summary: Place a multi-item order
+      summary: Place a multi-item order from the caller's cart
       description: |
-        Atomic reserve-all → charge → finalize flow. Requires `Idempotency-Key`
-        header (a UUID the client generates per checkout attempt). Retries
-        with the same key return the original order instead of creating a
-        new one. Duplicate product_ids in one request are rejected (400).
+        The order's items are pulled from the authenticated user's cart at
+        request time — there is no request body. Requires `Idempotency-Key`
+        header (a UUID the client generates per checkout attempt).
+
+        On success the cart is cleared (best-effort). Retry semantics: a
+        mid-flight retry (before cart-clear) succeeds because PlaceOrder is
+        idempotent on the parent key. A retry AFTER a successful response
+        sees an empty cart and gets 400 — clients that lost a response can
+        recover by listing their orders.
       security:
         - sessionCookie: []
       parameters:
@@ -171,12 +176,6 @@ paths:
           schema:
             type: string
             format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckoutRequest'
       responses:
         '201':
           description: Order placed.
@@ -185,7 +184,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Order'
         '400':
-          description: Missing Idempotency-Key, malformed body, empty items, duplicate product, or invalid quantity.
+          description: Missing Idempotency-Key, or cart is empty.
         '401':
           description: Missing or invalid session.
         '404':
@@ -193,7 +192,7 @@ paths:
         '409':
           description: Insufficient inventory or payment declined.
         '502':
-          description: Upstream order service unavailable.
+          description: Upstream order or cart service unavailable.
 
   /orders/{id}:
     get:
@@ -431,28 +430,6 @@ components:
         email:
           type: string
           format: email
-
-    CheckoutItemRequest:
-      type: object
-      required: [product_id, quantity]
-      properties:
-        product_id:
-          type: string
-          format: uuid
-        quantity:
-          type: integer
-          format: int32
-          minimum: 1
-
-    CheckoutRequest:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/CheckoutItemRequest'
 
     OrderItemJSON:
       type: object

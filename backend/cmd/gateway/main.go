@@ -73,7 +73,7 @@ func main() {
 
 	productsH := handlers.NewProductHandlers(catalogClient.Client)
 	cartH := handlers.NewCartHandlers(cartClient.Client)
-	checkoutH := handlers.NewCheckoutHandlers(orderClient.Client)
+	checkoutH := handlers.NewCheckoutHandlers(orderClient.Client, cartClient.Client)
 	ordersH := handlers.NewOrderHandlers(orderClient.Client)
 	secureCookies := os.Getenv("APP_ENV") == "production"
 

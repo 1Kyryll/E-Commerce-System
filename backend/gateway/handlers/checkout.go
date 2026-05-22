@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	cartv1 "github.com/1Kyryll/ecommerce-demo/backend/gen/proto/cart/v1"
 	orderv1 "github.com/1Kyryll/ecommerce-demo/backend/gen/proto/order/v1"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/middleware"
 )
@@ -23,19 +24,11 @@ type orderClient interface {
 
 type CheckoutHandlers struct {
 	order orderClient
+	cart  cartClient
 }
 
-func NewCheckoutHandlers(order orderClient) *CheckoutHandlers {
-	return &CheckoutHandlers{order: order}
-}
-
-type checkoutItemJSON struct {
-	ProductID string `json:"product_id"`
-	Quantity  int32  `json:"quantity"`
-}
-
-type checkoutRequest struct {
-	Items []checkoutItemJSON `json:"items"`
+func NewCheckoutHandlers(order orderClient, cart cartClient) *CheckoutHandlers {
+	return &CheckoutHandlers{order: order, cart: cart}
 }
 
 type orderItemJSON struct {
@@ -54,6 +47,15 @@ type orderJSON struct {
 	CreatedAt      string           `json:"created_at,omitempty"`
 }
 
+// Checkout reads the caller's cart, places an order for its contents, and on
+// success clears the cart. No request body — items come from the cart, the
+// only client input is the Idempotency-Key header.
+//
+// Retry semantics: a successful checkout clears the cart, so a retry with
+// the same Idempotency-Key after the response was already received will see
+// an empty cart and return 400. Mid-flight retries (before cart-clear)
+// succeed because PlaceOrder is idempotent on the parent key. Clients that
+// lost a response can recover via GET /orders.
 func (h *CheckoutHandlers) Checkout(w http.ResponseWriter, r *http.Request) {
 	uid, ok := middleware.GetUserID(r.Context())
 	if !ok {
@@ -65,19 +67,26 @@ func (h *CheckoutHandlers) Checkout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Idempotency-Key header required", http.StatusBadRequest)
 		return
 	}
-	var req checkoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+
+	cartResp, err := h.cart.GetCart(r.Context(), &cartv1.GetCartRequest{UserId: uid.String()})
+	if err != nil {
+		writeUpstreamError(w, err)
 		return
 	}
-	if len(req.Items) == 0 {
-		http.Error(w, "items must be non-empty", http.StatusBadRequest)
+	cartItems := cartResp.GetCart().GetItems()
+	if len(cartItems) == 0 {
+		http.Error(w, "cart is empty", http.StatusBadRequest)
 		return
 	}
-	items := make([]*orderv1.CheckoutItem, 0, len(req.Items))
-	for _, it := range req.Items {
-		items = append(items, &orderv1.CheckoutItem{ProductId: it.ProductID, Quantity: it.Quantity})
+
+	items := make([]*orderv1.CheckoutItem, 0, len(cartItems))
+	for _, ci := range cartItems {
+		items = append(items, &orderv1.CheckoutItem{
+			ProductId: ci.GetProductId(),
+			Quantity:  ci.GetQuantity(),
+		})
 	}
+
 	resp, err := h.order.PlaceOrder(r.Context(), &orderv1.PlaceOrderRequest{
 		IdempotencyKey: idem,
 		UserId:         uid.String(),
@@ -87,6 +96,15 @@ func (h *CheckoutHandlers) Checkout(w http.ResponseWriter, r *http.Request) {
 		writeCheckoutError(w, err)
 		return
 	}
+
+	// Best-effort cart clear. A failure here doesn't roll the order back —
+	// the order is already finalized. We log and continue so the caller
+	// gets their 201; a stale cart can be cleared manually.
+	if _, clearErr := h.cart.ClearCart(r.Context(), &cartv1.ClearCartRequest{UserId: uid.String()}); clearErr != nil {
+		slog.WarnContext(r.Context(), "checkout: cart clear failed",
+			"user_id", uid, "order_id", resp.GetOrder().GetId(), "err", clearErr)
+	}
+
 	writeJSON(w, http.StatusCreated, pbToOrderJSON(resp.GetOrder()))
 }
 
