@@ -22,9 +22,6 @@ type fakeOrderClient struct {
 	getFn   func(ctx context.Context, in *orderv1.GetOrderRequest, opts ...grpc.CallOption) (*orderv1.GetOrderResponse, error)
 }
 
-func (f *fakeOrderClient) CreateReservation(context.Context, *orderv1.CreateReservationRequest, ...grpc.CallOption) (*orderv1.CreateReservationResponse, error) {
-	return nil, nil
-}
 func (f *fakeOrderClient) PlaceOrder(ctx context.Context, in *orderv1.PlaceOrderRequest, opts ...grpc.CallOption) (*orderv1.PlaceOrderResponse, error) {
 	return f.placeFn(ctx, in, opts...)
 }

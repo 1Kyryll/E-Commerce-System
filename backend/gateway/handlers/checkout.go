@@ -13,8 +13,10 @@ import (
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/middleware"
 )
 
+// orderClient is the slice of orderv1.OrderServiceClient the gateway uses.
+// CreateReservation is deliberately excluded — it's an order-service-internal
+// concern that PlaceOrder orchestrates; the gateway never calls it directly.
 type orderClient interface {
-	CreateReservation(ctx context.Context, in *orderv1.CreateReservationRequest, opts ...grpc.CallOption) (*orderv1.CreateReservationResponse, error)
 	PlaceOrder(ctx context.Context, in *orderv1.PlaceOrderRequest, opts ...grpc.CallOption) (*orderv1.PlaceOrderResponse, error)
 	GetOrder(ctx context.Context, in *orderv1.GetOrderRequest, opts ...grpc.CallOption) (*orderv1.GetOrderResponse, error)
 }
