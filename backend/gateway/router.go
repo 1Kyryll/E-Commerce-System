@@ -13,6 +13,8 @@ type Deps struct {
 	AuthSvc       *auth.Service
 	ProductsH     *handlers.ProductHandlers
 	CartH         *handlers.CartHandlers
+	CheckoutH     *handlers.CheckoutHandlers
+	OrdersH       *handlers.OrderHandlers
 	SessionTTL    time.Duration
 	SecureCookies bool
 }
@@ -39,6 +41,9 @@ func NewRouter(d Deps) http.Handler {
 	mux.Handle("POST /cart/items", protect(http.HandlerFunc(d.CartH.AddItem)))
 	mux.Handle("DELETE /cart/items/{product_id}", protect(http.HandlerFunc(d.CartH.RemoveItem)))
 	mux.Handle("DELETE /cart", protect(http.HandlerFunc(d.CartH.Clear)))
+
+	mux.Handle("POST /checkout", protect(http.HandlerFunc(d.CheckoutH.Checkout)))
+	mux.Handle("GET /orders/{id}", protect(http.HandlerFunc(d.OrdersH.Get)))
 
 	return middleware.Recovery(middleware.RequestID(mux))
 }

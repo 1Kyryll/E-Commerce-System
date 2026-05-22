@@ -61,14 +61,28 @@ func main() {
 	}
 	defer cartClient.Close()
 
+	orderAddr := os.Getenv("ORDER_ADDR")
+	if orderAddr == "" {
+		orderAddr = "localhost:9002"
+	}
+	orderClient, err := clients.DialOrder(orderAddr)
+	if err != nil {
+		log.Fatalf("gateway: order client: %v", err)
+	}
+	defer orderClient.Close()
+
 	productsH := handlers.NewProductHandlers(catalogClient.Client)
 	cartH := handlers.NewCartHandlers(cartClient.Client)
+	checkoutH := handlers.NewCheckoutHandlers(orderClient.Client)
+	ordersH := handlers.NewOrderHandlers(orderClient.Client)
 	secureCookies := os.Getenv("APP_ENV") == "production"
 
 	router := gateway.NewRouter(gateway.Deps{
 		AuthSvc:       authSvc,
 		ProductsH:     productsH,
 		CartH:         cartH,
+		CheckoutH:     checkoutH,
+		OrdersH:       ordersH,
 		SessionTTL:    cfg.JWTTTL,
 		SecureCookies: secureCookies,
 	})
@@ -76,7 +90,7 @@ func main() {
 	addr := fmt.Sprintf(":%d", cfg.HTTPPort)
 	srv := gateway.NewServer(router)
 
-	slog.Info("gateway starting", "addr", addr, "catalog_addr", catalogAddr, "cart_addr", cartAddr, "secure_cookies", secureCookies)
+	slog.Info("gateway starting", "addr", addr, "catalog_addr", catalogAddr, "cart_addr", cartAddr, "order_addr", orderAddr, "secure_cookies", secureCookies)
 	if err := srv.ListenAndServe(ctx, addr, 5*time.Second); err != nil {
 		log.Fatalf("gateway: serve: %v", err)
 	}
