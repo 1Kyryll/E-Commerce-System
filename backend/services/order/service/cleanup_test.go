@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/1Kyryll/ecommerce-demo/backend/internal/payment"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/domain"
 )
 
@@ -22,7 +23,7 @@ func TestCleanupExpired_ReleasesAll(t *testing.T) {
 			return nil
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	n, err := svc.CleanupExpired(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("CleanupExpired: %v", err)
@@ -39,7 +40,7 @@ func TestCleanupExpired_EmptyList(t *testing.T) {
 	r := &fakeRepo{
 		listFn: func(context.Context, int32) ([]domain.Reservation, error) { return nil, nil },
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	n, err := svc.CleanupExpired(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("CleanupExpired: %v", err)
@@ -64,7 +65,7 @@ func TestCleanupExpired_ContinuesAfterReleaseFailure(t *testing.T) {
 			return nil
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	n, err := svc.CleanupExpired(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("CleanupExpired returned error: %v", err)
@@ -83,7 +84,7 @@ func TestCleanupExpired_ListError_Returns(t *testing.T) {
 			return nil, errors.New("db down")
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	_, err := svc.CleanupExpired(context.Background(), 100)
 	if err == nil {
 		t.Fatal("expected error to bubble up")

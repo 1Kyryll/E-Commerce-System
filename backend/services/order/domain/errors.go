@@ -27,4 +27,12 @@ var (
 	// state ('consumed' or 'released'), so PlaceOrder cannot finalize it. Maps to
 	// FailedPrecondition.
 	ErrReservationNotActive = errors.New("reservation not active")
+
+	// ErrEmptyCheckout means the items list was empty. Maps to InvalidArgument.
+	ErrEmptyCheckout = errors.New("checkout has no items")
+
+	// ErrDuplicateProduct means the same product_id appears more than once in
+	// a single checkout. Clients must coalesce; the cart already does. Maps
+	// to InvalidArgument.
+	ErrDuplicateProduct = errors.New("duplicate product in checkout")
 )

@@ -14,6 +14,7 @@ import (
 
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/config"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/database"
+	"github.com/1Kyryll/ecommerce-demo/backend/internal/payment"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/repo"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/service"
 )
@@ -42,7 +43,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	svc := service.NewService(repo.NewRepo(pool))
+	svc := service.NewService(repo.NewRepo(pool), payment.NewFakeClient())
 
 	slog.Info("cleanup-worker starting", "interval", cleanupInterval, "batch", cleanupBatch)
 

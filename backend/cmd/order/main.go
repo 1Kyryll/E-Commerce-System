@@ -19,6 +19,7 @@ import (
 	orderv1 "github.com/1Kyryll/ecommerce-demo/backend/gen/proto/order/v1"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/config"
 	"github.com/1Kyryll/ecommerce-demo/backend/internal/database"
+	"github.com/1Kyryll/ecommerce-demo/backend/internal/payment"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/handler"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/repo"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/service"
@@ -43,7 +44,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	orderSvc := service.NewService(repo.NewRepo(pool))
+	orderSvc := service.NewService(repo.NewRepo(pool), payment.NewFakeClient())
 	orderHandler := handler.New(orderSvc)
 
 	grpcServer := grpc.NewServer()

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/1Kyryll/ecommerce-demo/backend/internal/payment"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/domain"
 	"github.com/1Kyryll/ecommerce-demo/backend/services/order/repo"
 )
@@ -17,6 +18,11 @@ type fakeRepo struct {
 	getFn     func(ctx context.Context, key uuid.UUID) (domain.Reservation, error)
 	listFn    func(ctx context.Context, limit int32) ([]domain.Reservation, error)
 	releaseFn func(ctx context.Context, id uuid.UUID) error
+
+	priceFn         func(ctx context.Context, productID uuid.UUID) (repo.ProductPrice, error)
+	getOrderByIDFn  func(ctx context.Context, id uuid.UUID) (domain.Order, error)
+	getOrderByKeyFn func(ctx context.Context, key uuid.UUID) (domain.Order, error)
+	finalizeFn      func(ctx context.Context, p repo.FinalizeOrderParams) (domain.Order, error)
 }
 
 func (f *fakeRepo) CreateReservation(ctx context.Context, p repo.CreateReservationParams) (domain.Reservation, error) {
@@ -30,6 +36,31 @@ func (f *fakeRepo) ListExpired(ctx context.Context, limit int32) ([]domain.Reser
 }
 func (f *fakeRepo) Release(ctx context.Context, id uuid.UUID) error {
 	return f.releaseFn(ctx, id)
+}
+
+func (f *fakeRepo) GetProductPriceForOrder(ctx context.Context, id uuid.UUID) (repo.ProductPrice, error) {
+	if f.priceFn != nil {
+		return f.priceFn(ctx, id)
+	}
+	return repo.ProductPrice{}, nil
+}
+func (f *fakeRepo) GetOrderByID(ctx context.Context, id uuid.UUID) (domain.Order, error) {
+	if f.getOrderByIDFn != nil {
+		return f.getOrderByIDFn(ctx, id)
+	}
+	return domain.Order{}, domain.ErrOrderNotFound
+}
+func (f *fakeRepo) GetOrderByIdempotencyKey(ctx context.Context, key uuid.UUID) (domain.Order, error) {
+	if f.getOrderByKeyFn != nil {
+		return f.getOrderByKeyFn(ctx, key)
+	}
+	return domain.Order{}, domain.ErrOrderNotFound
+}
+func (f *fakeRepo) FinalizeOrder(ctx context.Context, p repo.FinalizeOrderParams) (domain.Order, error) {
+	if f.finalizeFn != nil {
+		return f.finalizeFn(ctx, p)
+	}
+	return domain.Order{}, nil
 }
 
 func TestCreateReservation_HappyPath(t *testing.T) {
@@ -46,7 +77,7 @@ func TestCreateReservation_HappyPath(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	res, err := svc.CreateReservation(context.Background(), idem, uid, pid, 2)
 	if err != nil {
 		t.Fatalf("CreateReservation: %v", err)
@@ -63,7 +94,7 @@ func TestCreateReservation_HappyPath(t *testing.T) {
 }
 
 func TestCreateReservation_InvalidQuantity_Zero(t *testing.T) {
-	svc := NewService(&fakeRepo{})
+	svc := NewService(&fakeRepo{}, payment.NewFakeClient())
 	_, err := svc.CreateReservation(context.Background(), uuid.New(), uuid.New(), uuid.New(), 0)
 	if !errors.Is(err, domain.ErrInvalidQuantity) {
 		t.Errorf("err = %v, want ErrInvalidQuantity", err)
@@ -71,7 +102,7 @@ func TestCreateReservation_InvalidQuantity_Zero(t *testing.T) {
 }
 
 func TestCreateReservation_InvalidQuantity_Negative(t *testing.T) {
-	svc := NewService(&fakeRepo{})
+	svc := NewService(&fakeRepo{}, payment.NewFakeClient())
 	_, err := svc.CreateReservation(context.Background(), uuid.New(), uuid.New(), uuid.New(), -5)
 	if !errors.Is(err, domain.ErrInvalidQuantity) {
 		t.Errorf("err = %v, want ErrInvalidQuantity", err)
@@ -84,7 +115,7 @@ func TestCreateReservation_InsufficientInventory(t *testing.T) {
 			return domain.Reservation{}, domain.ErrInsufficientInventory
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	_, err := svc.CreateReservation(context.Background(), uuid.New(), uuid.New(), uuid.New(), 1)
 	if !errors.Is(err, domain.ErrInsufficientInventory) {
 		t.Errorf("err = %v, want ErrInsufficientInventory", err)
@@ -97,7 +128,7 @@ func TestCreateReservation_ProductNotFound(t *testing.T) {
 			return domain.Reservation{}, domain.ErrProductNotFound
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	_, err := svc.CreateReservation(context.Background(), uuid.New(), uuid.New(), uuid.New(), 1)
 	if !errors.Is(err, domain.ErrProductNotFound) {
 		t.Errorf("err = %v, want ErrProductNotFound", err)
@@ -113,7 +144,7 @@ func TestCreateReservation_IdempotencyReplay(t *testing.T) {
 			return existing, nil
 		},
 	}
-	svc := NewService(r)
+	svc := NewService(r, payment.NewFakeClient())
 	got, err := svc.CreateReservation(context.Background(), uuid.New(), uuid.New(), uuid.New(), 99)
 	if err != nil {
 		t.Fatalf("CreateReservation: %v", err)
