@@ -70,3 +70,18 @@ SELECT
     (SELECT reservations.id FROM reservations WHERE reservations.idempotency_key = $2),
     '00000000-0000-0000-0000-000000000000'::uuid
   )::uuid AS existing_reservation_id;
+
+-- name: ConsumeReservationByID :one
+-- Used by FinalizeOrder inside the finalize transaction. Returns no rows
+-- when the reservation is no longer active (already consumed or released).
+UPDATE reservations
+   SET status = 'consumed', consumed_at = now()
+ WHERE id = $1
+   AND status = 'active'
+RETURNING id, idempotency_key, product_id, user_id, quantity, expires_at;
+
+-- name: GetReservationByID :one
+SELECT id, idempotency_key, product_id, user_id, quantity,
+       status, expires_at, created_at, consumed_at, released_at
+  FROM reservations
+ WHERE id = $1;

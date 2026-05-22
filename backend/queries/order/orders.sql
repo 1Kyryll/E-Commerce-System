@@ -38,3 +38,10 @@ SELECT id, order_id, product_id, reservation_id,
        quantity, unit_price_amount, unit_price_currency
   FROM order_items
  WHERE order_id = $1;
+
+-- name: GetProductPriceForOrder :one
+-- Used by PlaceOrder to compute order total. Order service legitimately
+-- reads from products (see docs/system-design.md: ORD --> PDB).
+SELECT id, price_amount, price_currency
+  FROM products
+ WHERE id = $1;
