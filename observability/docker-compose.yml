@@ -1,0 +1,15 @@
+name: ecom-observability
+
+networks:
+  ecom-net:
+    name: ecom-net
+    driver: bridge
+
+# Service definitions added in Tasks 2-6.
+services: {}
+
+volumes:
+  loki-data:
+  tempo-data:
+  mimir-data:
+  grafana-data:
