@@ -6,6 +6,23 @@ networks:
     driver: bridge
 
 services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    container_name: ecom-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+    networks:
+      - ecom-net
+
   mimir:
     image: grafana/mimir:2.14.0
     container_name: ecom-mimir
