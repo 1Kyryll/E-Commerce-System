@@ -24,26 +24,26 @@ flowchart LR
     K6[k6 load tests]
     COLL[OTel Collector]
     LOKI[(Loki<br/>logs)]
-    PROM[(Prometheus<br/>metrics)]
+    MIMIR[(Mimir<br/>metrics)]
     TEMPO[(Tempo<br/>traces)]
     GRAF[Grafana<br/>unified UI]
  
     APP -->|OTLP| COLL
-    K6 -->|remote-write| PROM
+    K6 -->|remote-write| MIMIR
     COLL --> LOKI
-    COLL --> PROM
+    COLL --> MIMIR
     COLL --> TEMPO
     LOKI --> GRAF
-    PROM --> GRAF
+    MIMIR --> GRAF
     TEMPO --> GRAF
  
     classDef plain fill:none,stroke:#666
-    class APP,K6,COLL,LOKI,PROM,TEMPO,GRAF plain
+    class APP,K6,COLL,LOKI,MIMIR,TEMPO,GRAF plain
 ```
  
 Each piece has one job. The **OTel Collector** is the central piece — the application talks only to it via OTLP, never to any storage backend directly. The collector receives, optionally processes (batching, sampling, attribute manipulation), and routes to the appropriate destination. This indirection is what makes the backends swappable and what lets new destinations be added (e.g., shipping errors to Sentry) without touching application code.
  
-**Loki** stores logs, indexed by labels (`service`, `level`, `trace_id`) rather than full text — which is what keeps it cheap at the cost of slower content searches. The application's `slog` JSON output goes through the collector to Loki. **Prometheus** stores metrics; both the application (via the collector) and k6 (via remote-write) write to it, and the shared `service` / `request_id` / `trace_id` labels propagate so metrics correlate with logs and traces. **Tempo** stores traces, addressable by trace ID; OTel context propagation across gRPC calls means a single trace covers gateway → order service → database → payment provider. **Grafana** is the query and visualization layer, with datasources provisioned declaratively and dashboards committed as JSON.
+**Loki** stores logs, indexed by labels (`service`, `level`, `trace_id`) rather than full text — which is what keeps it cheap at the cost of slower content searches. The application's `slog` records flow through an `otelslog` bridge to the collector and on to Loki, with trace context attached. **Mimir** stores metrics — a Prometheus-API-compatible long-term store; both the application (via the collector) and k6 (via remote-write) write to it, and the shared `service` / `request_id` / `trace_id` labels propagate so metrics correlate with logs and traces. **Tempo** stores traces, addressable by trace ID; OTel context propagation across gRPC calls means a single trace covers gateway → order service → database → payment provider. **Grafana** is the query and visualization layer, with datasources provisioned declaratively and dashboards committed as JSON. Each LGTM component runs in its own container (Loki, Tempo, Mimir, Grafana) plus the OTel Collector — see `observability/docker-compose.yml`.
 
 ## Folder structure
  
@@ -51,7 +51,7 @@ Each piece has one job. The **OTel Collector** is the central piece — the appl
 observability/
 ├── docker-compose.yml              # The whole stack, independent of the app
 ├── otel-collector-config.yaml      # Pipelines: receivers, processors, exporters
-├── prometheus.yml                  # Scrape config, remote-write receivers
+├── mimir-config.yaml               # Single-tenant filesystem store, 7d retention
 ├── loki-config.yml                 # Storage backend, retention policy
 ├── tempo-config.yaml               # Trace storage, ingester settings
 └── grafana/
@@ -69,13 +69,13 @@ A few decisions baked into this layout:
  
 The whole stack lives in its own `docker-compose.yml`, separate from the application's compose file. This split matters operationally — restarting the app shouldn't lose logs and metrics, and developing on the observability stack shouldn't disturb the app. Both compose files share a Docker network so the collector can reach the services and Prometheus can scrape them.
  
-The OTel Collector config (`otel-collector-config.yaml`) is the single most important file in this directory. It declares the pipelines: which receivers accept incoming telemetry (OTLP gRPC and HTTP), which processors transform it (batching, tail-based sampling, attribute renames), and which exporters send it onward (Loki, Prometheus remote-write, Tempo OTLP). Changing the storage backend means editing this file — not the application.
+The OTel Collector config (`otel-collector-config.yaml`) is the single most important file in this directory. It declares the pipelines: which receivers accept incoming telemetry (OTLP gRPC and HTTP), which processors transform it (batching, resource attribute upserts, optional tail-based sampling), and which exporters send it onward (Loki OTLP-HTTP, Mimir Prometheus remote-write, Tempo OTLP). Changing the storage backend means editing this file — not the application.
  
 Dashboards live as JSON files under `grafana/dashboards/`, provisioned automatically on startup via `grafana/provisioning/dashboards/dashboards.yml`. Treating dashboards as code means they're versioned, reviewable, survive container restarts, and can be diffed in PRs. The convention is one dashboard per concern — `service-overview.json` for RED metrics, `k6-load-test.json` for load tests overlaid on app metrics — rather than one monolithic dashboard that tries to do everything.
  
 Datasources are also provisioned declaratively in `grafana/provisioning/datasources/datasources.yml`, so a fresh Grafana container comes up already wired to Loki, Prometheus, and Tempo with no manual clicking. This is what makes the stack reproducible on a new server.
  
-Retention policies live in the per-component config files (`loki-config.yml`, `tempo-config.yaml`, `prometheus.yml`). For a single-VM demo they're set short — a few days for logs, a week for metrics, a couple of days for traces — enough to debug incidents and run load-test comparisons, not enough to accumulate disk pressure.
+Retention policies live in the per-component config files (`loki-config.yml`, `tempo-config.yaml`, `mimir-config.yaml`). For a single-VM demo they're set short — a few days for logs, a week for metrics, a couple of days for traces — enough to debug incidents and run load-test comparisons, not enough to accumulate disk pressure.
 
 ## What's deferred
  

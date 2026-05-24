@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Server is a thin wrapper around *http.Server that owns the run loop and
@@ -20,9 +22,14 @@ type Server struct {
 // net.Listener (see Serve). ReadHeaderTimeout is set defensively to avoid
 // Slowloris-style attacks.
 func NewServer(handler http.Handler) *Server {
+	instrumented := otelhttp.NewHandler(handler, "http.server",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			return r.Method + " " + r.URL.Path
+		}),
+	)
 	return &Server{
 		httpServer: &http.Server{
-			Handler:           handler,
+			Handler:           instrumented,
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
