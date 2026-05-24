@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -42,6 +43,10 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 	if endpoint == "" {
 		return func(context.Context) error { return nil }, nil
 	}
+	// gRPC exporters want host:port without a scheme. Strip http:// / https://
+	// if the user typed a URL — the SDK's env-var auto-parse has been flaky.
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
 
 	// NewSchemaless skips the schema-URL handshake — necessary because
 	// resource.Default() advertises whatever schema the current SDK ships
@@ -54,7 +59,10 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 		return nil, fmt.Errorf("resource: %w", err)
 	}
 
-	traceExp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
+	traceExp, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("trace exporter: %w", err)
 	}
@@ -68,7 +76,10 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 		propagation.TraceContext{}, propagation.Baggage{},
 	))
 
-	metricExp, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithInsecure())
+	metricExp, err := otlpmetricgrpc.New(ctx,
+		otlpmetricgrpc.WithEndpoint(endpoint),
+		otlpmetricgrpc.WithInsecure(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("metric exporter: %w", err)
 	}
@@ -83,7 +94,10 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 		return nil, fmt.Errorf("runtime metrics: %w", err)
 	}
 
-	logExp, err := otlploggrpc.New(ctx, otlploggrpc.WithInsecure())
+	logExp, err := otlploggrpc.New(ctx,
+		otlploggrpc.WithEndpoint(endpoint),
+		otlploggrpc.WithInsecure(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("log exporter: %w", err)
 	}
