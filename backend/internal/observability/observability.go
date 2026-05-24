@@ -43,8 +43,10 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
+	// NewSchemaless skips the schema-URL handshake — necessary because
+	// resource.Default() advertises whatever schema the current SDK ships
+	// with, which drifts faster than the semconv package we pin here.
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(
 		semconv.ServiceName(serviceName),
 		semconv.ServiceNamespace("ecommerce"),
 	))
