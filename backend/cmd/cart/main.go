@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -64,7 +65,7 @@ func main() {
 	cartSvc := service.NewService(repo.NewRepo(pool))
 	cartHandler := handler.New(cartSvc)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	cartv1.RegisterCartServiceServer(grpcServer, cartHandler)
 	reflection.Register(grpcServer)
 

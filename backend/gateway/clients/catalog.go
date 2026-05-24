@@ -3,6 +3,7 @@ package clients
 import (
 	"fmt"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -20,7 +21,10 @@ type CatalogClient struct {
 // In production this would use TLS; for local dev and same-host docker-compose
 // deployment, insecure is fine.
 func DialCatalog(addr string) (*CatalogClient, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("dial catalog %s: %w", addr, err)
 	}

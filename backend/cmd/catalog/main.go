@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -63,7 +64,7 @@ func main() {
 	catalogSvc := service.NewService(repo.NewRepo(pool))
 	catalogHandler := handler.New(catalogSvc)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	catalogv1.RegisterCatalogServiceServer(grpcServer, catalogHandler)
 	reflection.Register(grpcServer) // enables grpcurl
 
