@@ -32,6 +32,9 @@ run-cart:
 run-order:
 	cd backend && go run ./cmd/order
 
+run-binaries: 
+	cd backend && go run ./cmd/gateway ./cmd/catalog ./cmd/cart ./cmd/order
+
 frontend-dev:
 	cd frontend && npm run dev
 
