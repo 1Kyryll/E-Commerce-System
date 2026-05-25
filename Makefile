@@ -1,3 +1,8 @@
+# Use bash for recipes. On Windows GNU make defaults to cmd.exe, which can't
+# parse the `VAR=value command` syntax the load-* targets use. Bash ships
+# with Git for Windows / WSL / Docker Desktop.
+SHELL := bash
+
 .PHONY: generate generate-proto generate-db \
         migrate-up migrate-down \
         run-gateway run-catalog run-cart run-order \
