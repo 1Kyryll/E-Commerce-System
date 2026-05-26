@@ -2,6 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: ecom-postgres
+    # Raised from the default 100 to leave headroom for 4 services × 25-conn
+    # pools (see backend/internal/database/pool.go) plus psql/monitoring sessions.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
