@@ -3,7 +3,8 @@
 
 import { sleep } from 'k6';
 import { ensureAuthenticated } from './lib/auth.js';
-import { listProducts, pickRandomProductId, getProduct } from './lib/catalog.js';
+import { listProducts, getProduct } from './lib/catalog.js';
+import { randomFromArray } from './lib/config.js';
 import { getCart, addItem, clearCart } from './lib/cart.js';
 import { placeOrder, getOrder } from './lib/checkout.js';
 
@@ -31,7 +32,9 @@ export default function (data) {
     sleep(1);
     return;
   }
-  const pid = page.products[0].id;
+  // Pick a random product per iteration so we don't hammer the same row
+  // and exhaust its inventory (~15-80 units in seeded data).
+  const pid = randomFromArray(page.products).id;
   getProduct(pid);
 
   addItem(pid, 1);

@@ -1,10 +1,21 @@
 import { check, sleep } from 'k6';
 import { httpPost, jsonHeaders } from './config.js';
 
-// vuEmail returns a deterministic, unique email per (runId, VU). runId is a
-// per-run nonce produced by setup(); __VU is k6's 1-indexed VU number. The
-// scheme means: same VU in two different runs gets two different emails, so
-// the unique-email constraint on users(email) doesn't bite between runs.
+// sessionToken is a module-scoped variable that PERSISTS across iterations of
+// the same VU. We use it instead of k6's cookie jar because k6 clears the
+// per-VU jar between iterations in this version — empirically verified. The
+// JWT is stashed here once and attached via Cookie header on every
+// authenticated call. authHeaders() below is the helper.
+let sessionToken = '';
+
+export function authHeaders() {
+  return sessionToken ? { Cookie: `session=${sessionToken}` } : {};
+}
+
+// vuEmail returns a deterministic, unique email per (runId, VU). runId is
+// the per-run nonce produced by setup(); __VU is k6's 1-indexed VU number.
+// The scheme means same VU in two runs gets two different emails, so the
+// unique-email constraint on users(email) doesn't bite between runs.
 export function vuEmail(runId) {
   return `loadtest_${runId}_${__VU}@test.local`;
 }
@@ -13,8 +24,6 @@ export function vuEmail(runId) {
 // gateway's 8-char minimum. Not a secret — these accounts are throwaway.
 export const PASSWORD = 'loadtest-password';
 
-// signup posts to /auth/signup. The handler sets a session cookie that k6's
-// per-VU cookie jar will reuse on subsequent calls automatically.
 export function signup(email, password) {
   const res = httpPost(
     '/auth/signup',
@@ -37,18 +46,31 @@ export function login(email, password) {
   return res;
 }
 
-// ensureAuthenticated runs once per VU on iteration 0. Subsequent iterations
-// rely on the cookie jar. Falls back from signup → login on 409 collisions
-// so re-running the same runId doesn't break.
+// extractSession pulls the JWT out of a k6 response's parsed cookies.
+function extractSession(res) {
+  if (res && res.cookies && res.cookies.session && res.cookies.session.length > 0) {
+    return res.cookies.session[0].value;
+  }
+  return '';
+}
+
+// ensureAuthenticated guarantees the VU has a sessionToken before returning.
+// On the first iteration: sign up; if the email is already taken (409, can
+// happen on overlapping runIds), fall back to login. Subsequent iterations
+// short-circuit because sessionToken survives in module scope.
 export function ensureAuthenticated(runId) {
-  // k6 starts iteration numbering at 0; __ITER is the current iteration.
-  if (__ITER !== 0) return;
+  if (sessionToken) return;
+
   const email = vuEmail(runId);
   const signupRes = signup(email, PASSWORD);
-  if (signupRes.status === 409) {
-    login(email, PASSWORD);
+  if (signupRes.status === 201) {
+    sessionToken = extractSession(signupRes);
+  } else if (signupRes.status === 409) {
+    const loginRes = login(email, PASSWORD);
+    if (loginRes.status === 200) {
+      sessionToken = extractSession(loginRes);
+    }
   }
-  // Spread the auth burst across the ramp window by sleeping a small jitter
-  // (0–500ms). Without this, every VU hits /auth/signup the moment it spawns.
+  // Spread the auth burst when many VUs ramp up together.
   sleep(Math.random() * 0.5);
 }
