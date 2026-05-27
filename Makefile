@@ -3,7 +3,7 @@
 # with Git for Windows / WSL / Docker Desktop.
 SHELL := bash
 
-.PHONY: generate generate-proto generate-db \
+.PHONY: generate generate-proto generate-db generate-frontend-types \
         migrate-up migrate-down \
         run-gateway run-catalog run-cart run-order \
         frontend-dev seed
@@ -17,7 +17,10 @@ generate-proto:
 generate-db:
 	cd backend && sqlc generate
 
-generate: generate-proto generate-db
+generate-frontend-types:
+	cd frontend && npm run generate:types
+
+generate: generate-proto generate-db generate-frontend-types
 
 migrate-up:
 	migrate -path backend/migrations -database "$(MIGRATE_DATABASE_URL)" up
