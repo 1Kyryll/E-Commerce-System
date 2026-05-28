@@ -1,3 +1,4 @@
+"use client";
 import { ProductCard } from "./ProductCard";
 import { AddToCartButton } from "./AddToCartButton";
 import type { Product } from "../types";
