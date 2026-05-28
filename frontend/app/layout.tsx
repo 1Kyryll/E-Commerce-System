@@ -13,6 +13,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning className="h-full antialiased">
+      <head>
+        <link rel="stylesheet" href="/css/satoshi.css" />
+        <link rel="stylesheet" href="/css/general-sans.css" />
+      </head>
       <body className="min-h-full flex flex-col bg-primary text-secondary font-primary">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           {children}
