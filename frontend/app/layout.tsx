@@ -3,8 +3,9 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { Suspense } from "react";
 import { Nav } from "@/components/nav";
-import { CartProvider } from "@/features/cart/context";
-import { getCart, type Cart } from "@/features/cart/api";
+import { CartProvider, type EnrichedCartItem } from "@/features/cart/context";
+import { getCart } from "@/features/cart/api";
+import { getProduct } from "@/features/catalog/api";
 import "./index.css";
 
 export const metadata: Metadata = {
@@ -12,15 +13,22 @@ export const metadata: Metadata = {
   description: "An e-commerce demo",
 };
 
-async function loadInitialCart(): Promise<Cart> {
+async function loadInitialCart(): Promise<{ items: EnrichedCartItem[] }> {
   try {
-    return await getCart();
+    const cart = await getCart();
+    const items = await Promise.all(
+      cart.items.map(async (it): Promise<EnrichedCartItem> => {
+        try {
+          const product = await getProduct(it.product_id);
+          return { ...it, name: product.name, price: product.price };
+        } catch {
+          return it;
+        }
+      }),
+    );
+    return { items };
   } catch {
-    return {
-      id: "00000000-0000-0000-0000-000000000000",
-      user_id: "00000000-0000-0000-0000-000000000000",
-      items: [],
-    };
+    return { items: [] };
   }
 }
 

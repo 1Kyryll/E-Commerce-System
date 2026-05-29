@@ -21,7 +21,7 @@ export function ProductGrid({ items }: { items: Product[] }) {
           </ProductCard.Body>
           <ProductCard.Footer>
             <AddToCartButton
-              productId={p.id}
+              product={p}
               disabled={p.inventory_available <= 0}
             />
           </ProductCard.Footer>

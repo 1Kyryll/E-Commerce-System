@@ -2,7 +2,7 @@
 import { revalidateTag } from "next/cache";
 import { serverApi, unwrap } from "@/lib/api/server";
 import { userMessageFor } from "@/lib/api/errors";
-import { addItemSchema, updateQtySchema } from "./schemas";
+import { addItemSchema } from "./schemas";
 
 export type ActionResult = { ok: true } | { ok: false; formError: string };
 
@@ -49,37 +49,40 @@ export async function removeItemAction(productId: string): Promise<ActionResult>
   }
 }
 
-// The API only exposes POST /cart/items (cumulative add) and
-// DELETE /cart/items/{product_id}. There is no "set quantity" endpoint,
-// so we emulate it: remove the line, then re-add at the desired quantity.
-export async function updateQtyAction(input: {
+// Atomicity contract:
+//   delta > 0           → single POST (additive)              ✓ atomic
+//   newQuantity == 0    → single DELETE                       ✓ atomic
+//   delta < 0, newQty>0 → DELETE then POST                    ⚠ NOT atomic
+// The last case is the only non-atomic path. The backend does not
+// currently expose a PATCH/PUT to set absolute quantity; until it does,
+// shrinking a line without removing it has a small failure window where
+// the line can end up cleared. Acceptable for MVP; document an issue
+// to add a `PUT /cart/items/{product_id}` endpoint to fix it properly.
+export async function adjustQtyAction(input: {
   productId: string;
-  quantity: number;
+  delta: number;
+  previousQuantity: number;
 }): Promise<ActionResult> {
-  const parsed = updateQtySchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      formError: parsed.error.issues[0]?.message ?? "Invalid input",
-    };
+  const { productId, delta, previousQuantity } = input;
+  if (!Number.isInteger(delta) || delta === 0) return { ok: true };
+
+  const newQuantity = previousQuantity + delta;
+  if (newQuantity <= 0) return removeItemAction(productId);
+
+  if (delta > 0) {
+    return addItemAction({ productId, quantity: delta });
   }
-  if (parsed.data.quantity === 0) {
-    return removeItemAction(parsed.data.productId);
-  }
+
   try {
     const api = serverApi();
-    // Remove existing line (no-op safe if it doesn't exist server-side: returns 200 with cart).
     await unwrap(
       await api.DELETE("/cart/items/{product_id}", {
-        params: { path: { product_id: parsed.data.productId } },
+        params: { path: { product_id: productId } },
       }),
     );
     await unwrap(
       await api.POST("/cart/items", {
-        body: {
-          product_id: parsed.data.productId,
-          quantity: parsed.data.quantity,
-        },
+        body: { product_id: productId, quantity: newQuantity },
       }),
     );
     revalidateTag("cart", "default");

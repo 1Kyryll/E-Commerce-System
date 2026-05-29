@@ -5,7 +5,11 @@ import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, Minus, ShoppingCart } from "@/components/icons";
+import { formatMoney } from "@/lib/money";
 import { useCart } from "../context";
+import type { components } from "@/lib/types";
+
+type Money = components["schemas"]["Money"];
 
 function Root({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -66,17 +70,20 @@ function Items() {
         {items.map((it) => (
           <li key={it.product_id} className="flex gap-3">
             <div className="flex-1">
-              <p className="font-medium text-secondary font-mono text-sm">
-                {shortId(it.product_id)}
+              <p className="font-medium text-secondary">
+                {it.name ?? (
+                  <span className="font-mono text-sm">{shortId(it.product_id)}</span>
+                )}
               </p>
+              {it.price && (
+                <p className="text-sm text-sub-accent-1">{formatMoney(it.price)}</p>
+              )}
               <div className="flex items-center gap-2 mt-2">
                 <Button
                   intent="ghost"
                   size="icon"
                   aria-label="Decrease quantity"
-                  onClick={() =>
-                    setQty(it.product_id, (it.quantity ?? 1) - 1)
-                  }
+                  onClick={() => setQty(it.product_id, (it.quantity ?? 1) - 1)}
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
@@ -85,9 +92,7 @@ function Items() {
                   intent="ghost"
                   size="icon"
                   aria-label="Increase quantity"
-                  onClick={() =>
-                    setQty(it.product_id, (it.quantity ?? 0) + 1)
-                  }
+                  onClick={() => setQty(it.product_id, (it.quantity ?? 0) + 1)}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -110,13 +115,27 @@ function Items() {
 }
 
 function Summary() {
-  const { items, totalCount } = useCart();
+  const { items } = useCart();
   if (items.length === 0) return null;
+
+  const priced = items.filter((it) => it.price);
+  const currency =
+    (priced[0]?.price as Money | undefined)?.currency ?? "USD";
+  const subtotal = priced.reduce(
+    (acc, it) => acc + Number((it.price as Money).amount) * (it.quantity ?? 0),
+    0,
+  );
+  const allPriced = priced.length === items.length;
+
   return (
     <Sheet.Footer>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-secondary">Items</span>
-        <span className="font-secondary text-secondary">{totalCount}</span>
+        <span className="text-secondary">Subtotal</span>
+        <span className="font-secondary text-secondary">
+          {allPriced
+            ? formatMoney({ amount: subtotal.toFixed(4), currency })
+            : "—"}
+        </span>
       </div>
       <Button asChild className="w-full">
         <Link href="/checkout">Checkout</Link>

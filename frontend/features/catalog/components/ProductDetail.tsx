@@ -27,7 +27,7 @@ export function ProductDetail({ product }: { product: Product }) {
           <Badge tone="accent">Only {inv} left</Badge>
         ) : null}
         <div className="pt-4">
-          <AddToCartButton productId={product.id} disabled={outOfStock} />
+          <AddToCartButton product={product} disabled={outOfStock} />
         </div>
       </div>
     </div>

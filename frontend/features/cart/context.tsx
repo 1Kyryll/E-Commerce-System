@@ -10,14 +10,27 @@ import { toast } from "sonner";
 import {
   addItemAction,
   removeItemAction,
-  updateQtyAction,
+  adjustQtyAction,
 } from "./actions";
-import type { Cart, CartItem } from "./api";
+import type { CartItem } from "./api";
+import type { components } from "@/lib/types";
+
+type Money = components["schemas"]["Money"];
+
+// Backend's CartItem is `{ product_id, quantity, added_at? }` only.
+// We carry name + price client-side so the drawer renders product info
+// without a per-line refetch. The fields are populated when items are
+// added (by AddToCartButton, which knows the product) and when the
+// layout enriches initial items via getProduct on first load.
+export type EnrichedCartItem = CartItem & {
+  name?: string;
+  price?: Money;
+};
 
 type State = {
-  items: CartItem[];
+  items: EnrichedCartItem[];
   pending: boolean;
-  add: (item: CartItem) => void;
+  add: (item: EnrichedCartItem) => void;
   remove: (productId: string) => void;
   setQty: (productId: string, quantity: number) => void;
   totalCount: number;
@@ -32,11 +45,11 @@ export function useCart() {
 }
 
 type Patch =
-  | { type: "add"; item: CartItem }
+  | { type: "add"; item: EnrichedCartItem }
   | { type: "remove"; productId: string }
   | { type: "setQty"; productId: string; quantity: number };
 
-function reducer(state: CartItem[], patch: Patch): CartItem[] {
+function reducer(state: EnrichedCartItem[], patch: Patch): EnrichedCartItem[] {
   switch (patch.type) {
     case "add": {
       const i = state.findIndex((x) => x.product_id === patch.item.product_id);
@@ -44,6 +57,10 @@ function reducer(state: CartItem[], patch: Patch): CartItem[] {
         const next = [...state];
         next[i] = {
           ...next[i],
+          // Newer enrichment wins so adds from product pages overwrite stale
+          // entries that lost their name/price after a refresh.
+          name: patch.item.name ?? next[i].name,
+          price: patch.item.price ?? next[i].price,
           quantity: (next[i].quantity ?? 0) + (patch.item.quantity ?? 1),
         };
         return next;
@@ -66,16 +83,16 @@ export function CartProvider({
   initial,
   children,
 }: {
-  initial: Cart;
+  initial: { items: EnrichedCartItem[] };
   children: ReactNode;
 }) {
   const [optimistic, applyOptimistic] = useOptimistic(
-    (initial.items ?? []) as CartItem[],
+    initial.items,
     reducer,
   );
   const [pending, start] = useTransition();
 
-  function add(item: CartItem) {
+  function add(item: EnrichedCartItem) {
     start(async () => {
       applyOptimistic({ type: "add", item });
       const res = await addItemAction({
@@ -85,6 +102,7 @@ export function CartProvider({
       if (!res.ok) toast.error(res.formError);
     });
   }
+
   function remove(productId: string) {
     start(async () => {
       applyOptimistic({ type: "remove", productId });
@@ -92,10 +110,15 @@ export function CartProvider({
       if (!res.ok) toast.error(res.formError);
     });
   }
+
   function setQty(productId: string, quantity: number) {
+    const previousQuantity =
+      optimistic.find((x) => x.product_id === productId)?.quantity ?? 0;
+    const delta = quantity - previousQuantity;
+    if (delta === 0) return;
     start(async () => {
       applyOptimistic({ type: "setQty", productId, quantity });
-      const res = await updateQtyAction({ productId, quantity });
+      const res = await adjustQtyAction({ productId, delta, previousQuantity });
       if (!res.ok) toast.error(res.formError);
     });
   }
