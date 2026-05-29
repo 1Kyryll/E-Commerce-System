@@ -1,5 +1,5 @@
 "use server";
-import { revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { serverApi, unwrap } from "@/lib/api/server";
 import { userMessageFor } from "@/lib/api/errors";
 import { addItemSchema } from "./schemas";
@@ -27,7 +27,7 @@ export async function addItemAction(input: {
         },
       }),
     );
-    revalidateTag("cart", "default");
+    revalidatePath("/", "layout");
     return { ok: true };
   } catch (err) {
     return { ok: false, formError: userMessageFor(err) };
@@ -42,7 +42,7 @@ export async function removeItemAction(productId: string): Promise<ActionResult>
         params: { path: { product_id: productId } },
       }),
     );
-    revalidateTag("cart", "default");
+    revalidatePath("/", "layout");
     return { ok: true };
   } catch (err) {
     return { ok: false, formError: userMessageFor(err) };
@@ -85,7 +85,7 @@ export async function adjustQtyAction(input: {
         body: { product_id: productId, quantity: newQuantity },
       }),
     );
-    revalidateTag("cart", "default");
+    revalidatePath("/", "layout");
     return { ok: true };
   } catch (err) {
     return { ok: false, formError: userMessageFor(err) };
