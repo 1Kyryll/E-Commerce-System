@@ -99,7 +99,8 @@ export function CartProvider({
         productId: item.product_id,
         quantity: item.quantity ?? 1,
       });
-      if (!res.ok) toast.error(res.formError);
+      if (res.ok) toast.success("Added to cart");
+      else toast.error(res.formError);
     });
   }
 
