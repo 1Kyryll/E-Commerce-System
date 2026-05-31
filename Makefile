@@ -3,7 +3,7 @@
 # with Git for Windows / WSL / Docker Desktop.
 SHELL := bash
 
-.PHONY: generate generate-proto generate-db generate-frontend-types \
+.PHONY: generate generate-backend generate-proto generate-db generate-frontend-types \
         migrate-up migrate-down \
         run-gateway run-catalog run-cart run-order \
         frontend-dev seed
@@ -19,6 +19,10 @@ generate-db:
 
 generate-frontend-types:
 	cd frontend && npm run generate:types
+
+# Backend-only codegen. Use this where the Node/frontend toolchain isn't
+# available (e.g. the backend CI job) — it skips generate-frontend-types.
+generate-backend: generate-proto generate-db
 
 generate: generate-proto generate-db generate-frontend-types
 

@@ -45,7 +45,7 @@ jobs:
           sqlc-version: '1.27.0'
 
       - name: Generate code (proto + sqlc)
-        run: make generate
+        run: make generate-backend
 
       - name: Unit tests
         working-directory: backend
