@@ -8,7 +8,6 @@ backend/gen/
 node_modules/
 .next/
 out/
-frontend/lib/types.ts
 
 # Env
 .env

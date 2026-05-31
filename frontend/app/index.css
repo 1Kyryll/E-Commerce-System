@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@keyframes animate-in {
+    from {
+        opacity: 0;
+        scale: 0.95;
+    }
+    to {
+        opacity: 1;
+        scale: 1;
+    }
+}
+
+@keyframes animate-out {
+    from {
+        opacity: 1;
+        scale: 1;
+    }
+    to {
+        opacity: 0;
+        scale: 0.95;
+    }
+}
+
+@layer base {
+    * {
+        @apply box-border;
+    }
+}
+
+@theme {
+    --font-primary: 'Satoshi', system-ui, sans-serif;
+    --font-secondary: 'General Sans', system-ui, sans-serif;
+
+    /* 60% Canvas (Ultra-Soft Lavender Gray background) */
+    --color-primary: hsl(270, 15%, 97%);
+
+    /* 30% Secondary (Muted Plum for headers, nav, and primary text) */
+    --color-secondary: hsl(291, 20%, 21%);
+
+    /* Sub-Accent 1 (Dreamy Lavender for cards, tags, or borders) */
+    --color-sub-accent-1: hsl(280, 20%, 66%);
+
+    /* 10% Accent A (Matcha Green - your primary 'Add to Cart' button) */
+    --color-action-primary: hsl(125, 14%, 49%);
+
+    /* 10% Accent B (Soft Peach Blossom - for 'Sale' badges or secondary actions) */
+    --color-action-secondary: hsl(16, 83%, 74%);
+}

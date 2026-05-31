@@ -272,14 +272,48 @@ The discipline: every migration must be backward-compatible with the previous de
  
  
 ## Frontend
- 
-The frontend is intentionally minimal. The structure:
- 
-- `app/` — Next.js App Router pages. Server Components by default; Client Components only where interactivity demands it.
-- `components/` — UI primitives in `components/ui/`, domain components elsewhere.
-- `lib/api.ts` — a thin typed wrapper over `fetch`. Errors thrown as typed exceptions. No data-fetching library — Next.js fetch + cache tags handle revalidation.
-- `lib/types.ts` — generated from `backend/gateway/openapi.yaml`. Never hand-edited.
-State management is deliberately absent. Server Components fetch and pass data; mutations go through `lib/api.ts` and re-fetch. No Redux, no Zustand, no React Query — until something concrete demands them.
+
+The frontend is organized by feature, not by technical layer. Each user-facing surface — auth, catalog browsing, cart, checkout, account — owns a folder under `features/`, and `app/` holds only the route plumbing. This is the shape the MVP grew into once it had real surfaces (a login flow, an optimistic cart, a checkout, an order history) that needed shared primitives and cross-route state; a flat `app/` + `components/` layout scatters that logic across route folders and leaves no obvious home for code that several routes depend on.
+
+```
+frontend/
+├── app/                  # routes only: page/layout/loading/error/not-found/global-error
+│   ├── (auth)/{login,signup}
+│   ├── products/[id]
+│   ├── cart, checkout
+│   ├── orders/[id]
+│   └── account, account/orders
+├── features/
+│   ├── auth/      # actions.ts, session.ts, schemas.ts, components/
+│   ├── catalog/   # api.ts, types.ts, components/ (ProductCard compound, Grid, Detail, Pagination, AddToCartButton)
+│   ├── cart/      # api.ts, actions.ts, schemas.ts, context.tsx (CartProvider, useOptimistic), components/ (Cart compound, CartNavSlot)
+│   ├── checkout/  # actions.ts, schemas.ts, components/ (Checkout single-screen)
+│   └── account/   # api.ts, components/ (ProfileCard, OrdersTable)
+├── components/
+│   ├── ui/        # button, input, label, form-field (Field), card, surface, dialog, sheet, tabs, badge, skeleton, spinner
+│   ├── icons.ts   # lucide-react re-exports
+│   ├── container.tsx
+│   └── nav.tsx
+├── lib/
+│   ├── api/       # server.ts (serverApi + unwrap + forwardSetCookies), client.ts, errors.ts (ApiError)
+│   ├── cn.ts, money.ts, types.ts (generated)
+├── proxy.ts       # Next 16 renamed middleware -> proxy; gates /checkout,/account,/orders against gateway /me
+└── public/        # self-hosted Satoshi + General Sans fonts, css
+```
+
+**Import direction.** Dependencies flow `app/` → `features/` → `components/` → `lib/`, never upward. A route in `app/` composes one or more feature components; a feature owns its data access, its Server Actions, its Zod schemas, and its own components. Two rules keep the slices honest: **features never import each other** (anything two features both need is either a `components/ui/` primitive or a `lib/` helper), and **`components/` is feature-agnostic** — it knows about variants and accessibility, never about products, carts, or orders. `components/` is the one deliberate exception to feature-slicing: it is a technical-layer folder for cross-feature primitives, the App-Router analogue of the backend's `internal/`.
+
+**Primitives.** UI primitives in `components/ui/` are polymorphic. Variants are expressed with [CVA](https://cva.style) (class-variance-authority) so a `Button` carries its `variant`/`size` matrix in one place, and `asChild` (via `@radix-ui/react-slot`) lets a primitive render *as* another element — `<Button asChild><Link/></Button>` produces a styled anchor with no wrapper. Several primitives are **compound components**: `Field`, `Card`, `Dialog`, `Sheet`, and `Tabs` expose sub-parts through `Object.assign(Root, { Sub })` and share state via React context (e.g. `Tabs` tracks the active tab, `Field` wires label/error to the input). The catalog `ProductCard` and the `Cart` are feature-level compounds built the same way.
+
+There is one RSC-boundary nuance worth internalizing: a compound assembled in a `"use client"` module only works when its *consumer* is also a client component. Across the server/client boundary the attached sub-components (`ProductCard.Price`, `Cart.Item`, …) come back `undefined`, because the server serializes the root reference without the `Object.assign`-ed properties. This is why `ProductGrid` and `CartNavSlot` exist as thin client wrappers — they pull the compound into a client subtree so the sub-components resolve.
+
+**Data flow.** Reads happen in Server Components: each feature's `api.ts` calls the gateway through `lib/api/server.ts` (`serverApi` + `unwrap`, which throws a typed `ApiError` on non-2xx), and the RSC passes plain data down. Mutations are **Server Actions** living in `features/<x>/actions.ts`; after a successful write they call `revalidatePath("/", "layout")` to re-render the affected tree. (We use path revalidation rather than `revalidateTag` deliberately — under Next 16 the "default" cache profile silently no-ops tag revalidation, so it does nothing.) The cart layers `useOptimistic` over its Server Actions through `features/cart/context.tsx`, so add/remove feels instant and reconciles against the server result. There is no client data-fetching library: RSC + Server Actions + `useOptimistic` cover every case the MVP has.
+
+**Auth.** Sessions are a cookie issued by the gateway. `proxy.ts` (Next 16's rename of `middleware.ts`) gates `/checkout`, `/account`, and `/orders` by *validating* the cookie — it calls the gateway's `/me` with the incoming cookie and redirects on a non-2xx, rather than trusting the cookie's mere presence. Because Next.js does not auto-relay `Set-Cookie` from a Server Action's `fetch`, auth mutations call `forwardSetCookies()` (in `lib/api/server.ts`) to copy the gateway's cookie onto the action's response so the browser actually stores it.
+
+**Design tokens** live in `app/index.css` as CSS custom properties consumed by Tailwind v4's `@theme`. A `next-themes` provider is scaffolded for dark mode, but only a single light palette is defined today. Generated types in `lib/types.ts` come from `backend/gateway/openapi.yaml` and are never hand-edited; money is modelled as the gateway returns it — `{ amount: string; currency: string }`, a decimal string, not minor units — with formatting centralized in `lib/money.ts`.
+
+**Testing.** There are no frontend unit tests. The gates are `tsc --noEmit`, `eslint`, and a successful `next build`; the generated types plus end-to-end type-checking catch the class of bug a thin component test would, without the maintenance cost.
  
  
 ## Conventions
