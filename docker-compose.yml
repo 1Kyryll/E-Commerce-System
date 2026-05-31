@@ -1,3 +1,22 @@
+# Local full-stack dev. The app images are built from the per-service
+# Dockerfiles (one per backend binary, one for the frontend).
+#
+# Prerequisites:
+#   - The shared network must exist:  docker network create ecom-net
+#   - Generated backend code must be present (the Go builds need backend/gen):
+#       make generate-backend
+#
+# Then:  docker compose up --build
+#
+# The `migrate` one-shot applies backend/migrations before the services start.
+
+# Shared environment for the Go services. Every binary calls config.Load(),
+# which requires DATABASE_URL, REDIS_URL and JWT_SECRET.
+x-backend-env: &backend-env
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/ecommerce?sslmode=disable
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-min-32-chars-1234567890}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -33,6 +52,157 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+
+  # One-shot schema migration. Runs to completion, then app services start.
+  migrate:
+    image: migrate/migrate:4
+    container_name: ecom-migrate
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://postgres:postgres@postgres:5432/ecommerce?sslmode=disable"
+      - "up"
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecom-net
+    restart: "no"
+
+  catalog:
+    build:
+      context: ./backend
+      dockerfile: cmd/catalog/Dockerfile
+    container_name: ecom-catalog
+    environment:
+      <<: *backend-env
+      GRPC_PORT: "9000"
+      OTEL_SERVICE_NAME: catalog
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - ecom-net
+    restart: unless-stopped
+
+  cart:
+    build:
+      context: ./backend
+      dockerfile: cmd/cart/Dockerfile
+    container_name: ecom-cart
+    environment:
+      <<: *backend-env
+      CART_GRPC_PORT: "9001"
+      OTEL_SERVICE_NAME: cart
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - ecom-net
+    restart: unless-stopped
+
+  order:
+    build:
+      context: ./backend
+      dockerfile: cmd/order/Dockerfile
+    container_name: ecom-order
+    environment:
+      <<: *backend-env
+      ORDER_GRPC_PORT: "9002"
+      OTEL_SERVICE_NAME: order
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - ecom-net
+    restart: unless-stopped
+
+  cleanup-worker:
+    build:
+      context: ./backend
+      dockerfile: cmd/cleanup-worker/Dockerfile
+    container_name: ecom-cleanup-worker
+    environment:
+      <<: *backend-env
+      OTEL_SERVICE_NAME: cleanup-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - ecom-net
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./backend
+      dockerfile: cmd/gateway/Dockerfile
+    container_name: ecom-gateway
+    environment:
+      <<: *backend-env
+      HTTP_PORT: "8080"
+      CATALOG_ADDR: catalog:9000
+      CART_ADDR: cart:9001
+      ORDER_ADDR: order:9002
+      OTEL_SERVICE_NAME: gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      catalog:
+        condition: service_started
+      cart:
+        condition: service_started
+      order:
+        condition: service_started
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      # Bakes the /api/* -> gateway rewrite destination at build time.
+      args:
+        GATEWAY_URL: http://gateway:8080
+    container_name: ecom-frontend
+    environment:
+      # Server-side fetches (lib/api/server.ts) read this at runtime.
+      GATEWAY_URL: http://gateway:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - ecom-net
+    restart: unless-stopped
 
 volumes:
   postgres-data:
