@@ -137,9 +137,11 @@ function Summary() {
             : "—"}
         </span>
       </div>
-      <Button asChild className="w-full">
-        <Link href="/checkout">Checkout</Link>
-      </Button>
+      <Sheet.Close asChild>
+        <Button asChild className="w-full">
+          <Link href="/checkout">Checkout</Link>
+        </Button>
+      </Sheet.Close>
     </Sheet.Footer>
   );
 }

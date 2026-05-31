@@ -8,6 +8,7 @@ import { Check } from "@/components/icons";
 import { formatMoney } from "@/lib/money";
 import { serverApi, unwrap } from "@/lib/api/server";
 import { ApiError } from "@/lib/api/errors";
+import { getProduct } from "@/features/catalog/api";
 import type { components } from "@/lib/types";
 
 type Order = components["schemas"]["Order"];
@@ -44,6 +45,20 @@ export default async function OrderPage({
     throw err;
   }
 
+  // OrderItem only carries product_id; resolve names for display.
+  const nameById = new Map(
+    await Promise.all(
+      order.items.map(async (it): Promise<[string, string | null]> => {
+        try {
+          const p = await getProduct(it.product_id);
+          return [it.product_id, p.name];
+        } catch {
+          return [it.product_id, null];
+        }
+      }),
+    ),
+  );
+
   return (
     <Container className="py-10 flex-1 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
@@ -69,8 +84,10 @@ export default async function OrderPage({
                 className="flex items-center justify-between gap-4"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm text-secondary truncate">
-                    {it.product_id}
+                  <p className="text-secondary truncate">
+                    {nameById.get(it.product_id) ?? (
+                      <span className="font-mono text-sm">{it.product_id}</span>
+                    )}
                   </p>
                   <p className="text-sm text-sub-accent-1">
                     {formatMoney(it.unit_price)} × {it.quantity}
