@@ -1,0 +1,9 @@
+# Build context root is backend/.
+#
+# NOTE: gen/ is intentionally NOT ignored — the build needs the generated
+# proto + sqlc code under backend/gen. Run `make generate-backend` before
+# `docker build` (the CI pipeline regenerates it before building).
+.env
+.env.*
+*.md
+seeds/
