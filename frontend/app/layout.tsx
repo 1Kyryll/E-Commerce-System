@@ -39,8 +39,13 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="h-full antialiased">
       <head>
+        {/* Self-hosted font CSS lives in public/css and references its own
+            woff2 files; loaded via <link> intentionally. next/font can't
+            consume a pre-written @font-face stylesheet. */}
+        {/* eslint-disable @next/next/no-css-tags */}
         <link rel="stylesheet" href="/css/satoshi.css" />
         <link rel="stylesheet" href="/css/general-sans.css" />
+        {/* eslint-enable @next/next/no-css-tags */}
       </head>
       <body className="min-h-full flex flex-col bg-primary text-secondary font-primary">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>

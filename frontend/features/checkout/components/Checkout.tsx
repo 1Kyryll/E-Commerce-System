@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,14 +30,9 @@ export function Checkout() {
   const allPriced = priced.length === items.length && items.length > 0;
   const currency =
     (priced[0]?.price as Money | undefined)?.currency ?? "USD";
-  const subtotal = useMemo(
-    () =>
-      priced.reduce(
-        (acc, it) =>
-          acc + Number((it.price as Money).amount) * (it.quantity ?? 0),
-        0,
-      ),
-    [priced],
+  const subtotal = priced.reduce(
+    (acc, it) => acc + Number((it.price as Money).amount) * (it.quantity ?? 0),
+    0,
   );
 
   if (items.length === 0) {
