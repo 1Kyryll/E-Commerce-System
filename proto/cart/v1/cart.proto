@@ -11,6 +11,7 @@ service CartService {
   rpc AddItem(AddItemRequest) returns (AddItemResponse);
   rpc RemoveItem(RemoveItemRequest) returns (RemoveItemResponse);
   rpc ClearCart(ClearCartRequest) returns (ClearCartResponse);
+  rpc SetItemQuantity(SetItemQuantityRequest) returns (SetItemQuantityResponse);
 }
 
 message CartItem {
@@ -43,3 +44,10 @@ message RemoveItemResponse { Cart cart = 1; }
 
 message ClearCartRequest  { string user_id = 1; }
 message ClearCartResponse {}
+
+message SetItemQuantityRequest{
+    string user_id = 1;
+    string product_id = 2;
+    int32 quantity = 3;
+}
+message SetItemQuantityResponse{ int32 quantity = 1; }
