@@ -133,11 +133,11 @@ frontend job (generated-types check, typecheck, lint, build) on every push.
 
 ## TODO 
 
-- Cart atomic change 
-- List User Products 
-- Redis cache
-- Polish Grafana dashboards
-- Robust load-testing with 10K+ VUs
-- Deploy the application 
-- Load Balancer 
-- Down-stream services(Email, Warehouse, etc.)
+- [ ] Cart atomic change 
+- [ ] List User Products 
+- [ ] Redis cache
+- [ ] Polish Grafana dashboards
+- [ ] Robust load-testing with 10K+ VUs
+- [ ] Deploy the application 
+- [ ] Load Balancer 
+- [ ] Down-stream services(Email, Warehouse, etc.)
