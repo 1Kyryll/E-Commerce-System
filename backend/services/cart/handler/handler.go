@@ -18,6 +18,7 @@ type Service interface {
 	AddItem(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
 	RemoveItem(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
 	ClearCart(ctx context.Context, userID uuid.UUID) error
+	SetItemQuantity(ctx context.Context, userID, productID uuid.UUID, qty int32) error
 }
 
 type Handler struct {
@@ -81,6 +82,21 @@ func (h *Handler) ClearCart(ctx context.Context, req *cartv1.ClearCartRequest) (
 		return nil, status.Errorf(codes.Internal, "clear cart: %v", err)
 	}
 	return &cartv1.ClearCartResponse{}, nil
+}
+
+func (h *Handler) SetItemQuantity(ctx context.Context, req *cartv1.SetItemQuantityRequest) (*cartv1.SetItemQuantityResponse, error) {
+	userID, err := uuid.Parse(req.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
+	}
+	pid, err := uuid.Parse(req.GetProductId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid product_id")
+	}
+	if err := h.svc.SetItemQuantity(ctx, userID, pid, req.GetQuantity()); err != nil {
+		return nil, mapServiceError(err, "set item quantity")
+	}
+	return &cartv1.SetItemQuantityResponse{}, nil
 }
 
 func mapServiceError(err error, op string) error {

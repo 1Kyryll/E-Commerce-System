@@ -131,6 +131,34 @@ func (r *Repo) Clear(ctx context.Context, userID uuid.UUID) error {
 	})
 }
 
+// SetItemQuantity updates the quantity of a product in the specified cart.
+//
+// if qty is 0, the item is removed from the cart.
+// returns an err if the cart item does not exist (the product is not in cart).
+func (r *Repo) SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error {
+	if qty < 0 {
+		return fmt.Errorf("cart-repo: SetItemQuantity: quantity cannot be negative")
+	}
+	if qty == 0 {
+		err := r.queries.RemoveCartItem(ctx, cartdb.RemoveCartItemParams{
+			CartID:    cartID,
+			ProductID: productID,
+		})
+		if err != nil {
+			return fmt.Errorf("cart-repo: SetItemQuantity: %w", err)
+		}
+		return nil
+	}
+	rowsAffected, err := r.queries.SetCartItemQuantity(ctx, cartdb.SetCartItemQuantityParams{CartID: cartID, ProductID: productID, Quantity: qty})
+	if err != nil {
+		return fmt.Errorf("cart-repo: SetItemQuantity: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("cart-repo: SetItemQuantity: cart item not found")
+	}
+	return nil
+}
+
 // inTx opens a tx-bound *Queries, runs fn, and commits on nil. Any error
 // rolls the tx back.
 func (r *Repo) inTx(ctx context.Context, fn func(*cartdb.Queries) error) error {

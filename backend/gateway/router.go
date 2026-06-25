@@ -41,6 +41,7 @@ func NewRouter(d Deps) http.Handler {
 	mux.Handle("POST /cart/items", protect(http.HandlerFunc(d.CartH.AddItem)))
 	mux.Handle("DELETE /cart/items/{product_id}", protect(http.HandlerFunc(d.CartH.RemoveItem)))
 	mux.Handle("DELETE /cart", protect(http.HandlerFunc(d.CartH.Clear)))
+	mux.Handle("PUT /cart/items/{product_id}", protect(http.HandlerFunc(d.CartH.SetItemQuantity)))
 
 	mux.Handle("POST /checkout", protect(http.HandlerFunc(d.CheckoutH.Checkout)))
 	mux.Handle("GET /orders/{id}", protect(http.HandlerFunc(d.OrdersH.Get)))

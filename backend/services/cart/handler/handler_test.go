@@ -19,6 +19,7 @@ type fakeSvc struct {
 	addFn    func(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
 	removeFn func(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
 	clearFn  func(ctx context.Context, userID uuid.UUID) error
+	setcartitemqtyFn func(ctx context.Context, cartID, productID uuid.UUID, qty int32) error
 }
 
 func (f *fakeSvc) GetCart(ctx context.Context, userID uuid.UUID) (domain.Cart, error) {
@@ -32,6 +33,9 @@ func (f *fakeSvc) RemoveItem(ctx context.Context, userID, productID uuid.UUID) (
 }
 func (f *fakeSvc) ClearCart(ctx context.Context, userID uuid.UUID) error {
 	return f.clearFn(ctx, userID)
+}
+func (f *fakeSvc) SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error {
+	return f.setcartitemqtyFn(ctx, cartID, productID, qty)
 }
 
 func TestGetCart_OK(t *testing.T) {
@@ -187,5 +191,122 @@ func TestClearCart_OK(t *testing.T) {
 	}
 	if !called {
 		t.Error("ClearCart was not called")
+	}
+}
+
+func TestSetItemQuantity_OK(t *testing.T) {
+	userID, productID := uuid.New(), uuid.New()
+	called := false
+	svc := &fakeSvc{
+		setcartitemqtyFn: func(_ context.Context, uid, pid uuid.UUID, qty int32) error {
+			called = true
+			if userID != uid || productID != pid {
+				t.Errorf("args = (%s, %s)", uid, pid)
+			}
+			if qty != 3 {
+				t.Errorf("qty forwarded = %d, want 3", qty)
+			}
+			return nil
+		},
+	}
+
+	h := New(svc)
+	resp, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+		UserId:    userID.String(),
+		ProductId: productID.String(),
+		Quantity:  3,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non nil resp")
+	}
+	if !called {
+		t.Error("service: SetItemQuantity was never called")
+	}
+}
+
+func TestSetItemQuantity_BadCartID_InvalidArgument(t *testing.T) {
+	h := New(&fakeSvc{})
+	_, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+		UserId:    "not-a-uuid",
+		ProductId: uuid.New().String(),
+		Quantity:  1,
+	})
+	if code := status.Code(err); code != codes.InvalidArgument {
+		t.Errorf("code = %v", status.Code(err))
+	}
+}
+
+func TestSetItemQuantity_BadProductID_InvalidArgument(t *testing.T) {
+	h := New(&fakeSvc{})
+	_, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+		UserId:    uuid.New().String(),
+		ProductId: "not-a-uuid",
+		Quantity:  1,
+	})
+	if code := status.Code(err); code != codes.InvalidArgument {
+		t.Errorf("code = %v", status.Code(err))
+	}
+}
+
+func TestSetItemQuantity_InvalidQuantity(t *testing.T) {
+	for _, qty := range []int32{0, -1, -100} {
+		qty := qty
+		t.Run(fmt.Sprintf("qty %d", qty), func(t *testing.T) {
+			svc := &fakeSvc{
+				setcartitemqtyFn: func(context.Context, uuid.UUID, uuid.UUID, int32) error {
+					return domain.ErrInvalidQuantity
+				},
+			}
+			h := New(svc)
+			_, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+				UserId:    uuid.New().String(),
+				ProductId: uuid.New().String(),
+				Quantity:  qty,
+			})
+			if code := status.Code(err); code != codes.InvalidArgument {
+				t.Errorf("qty %d: got gRPC code %v but want InvalidArgument", qty, code)
+			}
+		})
+	}
+}
+
+func TestSetItemQuantity_ProductNotFound(t *testing.T) {
+	svc := &fakeSvc{
+		setcartitemqtyFn: func(context.Context, uuid.UUID, uuid.UUID, int32) error {
+			return domain.ErrProductNotFound
+		},
+	}
+	h := New(svc)
+
+	_, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+		UserId: uuid.New().String(), ProductId: uuid.New().String(),
+		Quantity: 1,
+	})
+	if code := status.Code(err); code != codes.NotFound {
+		t.Errorf("got grpc code %v but want NotFound", code)
+	}
+}
+
+func TestSetItemQuantity_ServiceError_Internal(t *testing.T) {
+	svc := &fakeSvc{
+		setcartitemqtyFn: func(context.Context, uuid.UUID, uuid.UUID, int32) error {
+			return errors.New("db down")
+		},
+	}
+	h := New(svc)
+
+	_, err := h.SetItemQuantity(context.Background(), &cartv1.SetItemQuantityRequest{
+		UserId: uuid.New().String(), ProductId: uuid.New().String(),
+		Quantity: 1,
+	})
+	if code := status.Code(err); code != codes.Internal {
+		t.Errorf("code = %v", status.Code(err))
+	}
+
+	if status.Convert(err).Message() == "db down" {
+		t.Error("internal err detail leak to caller")
 	}
 }

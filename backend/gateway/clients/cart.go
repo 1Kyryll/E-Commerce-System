@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"fmt"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -31,4 +32,13 @@ func DialCart(addr string) (*CartClient, error) {
 
 func (c *CartClient) Close() error {
 	return c.conn.Close()
+}
+
+// SetItemQuantity sets the quantity of a cart line to an absolute value in a single atomic UPDATE.
+func (c *CartClient) SetItemQuantity(ctx context.Context, userID, productID string, qty int32) (*cartv1.SetItemQuantityResponse, error) {
+	return c.Client.SetItemQuantity(ctx, &cartv1.SetItemQuantityRequest{
+		UserId:    userID,
+		ProductId: productID,
+		Quantity:  qty,
+	})
 }

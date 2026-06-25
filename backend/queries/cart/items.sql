@@ -23,6 +23,11 @@ ON CONFLICT (cart_id, product_id) DO UPDATE
    SET quantity = cart_items.quantity + EXCLUDED.quantity
 RETURNING id, cart_id, product_id, quantity, added_at;
 
+-- name: SetCartItemQuantity :execrows
+UPDATE cart_items
+SET quantity = $3
+WHERE cart_id = $1 AND product_id = $2;
+
 -- name: RemoveCartItem :exec
 DELETE FROM cart_items
  WHERE cart_id = $1 AND product_id = $2;

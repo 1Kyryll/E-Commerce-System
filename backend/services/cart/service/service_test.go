@@ -16,6 +16,7 @@ type fakeRepo struct {
 	addFn     func(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
 	removeFn  func(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
 	clearFn   func(ctx context.Context, userID uuid.UUID) error
+	setcartitemqtyFn func(ctx context.Context, cartID, productID uuid.UUID, qty int32) error
 }
 
 func (f *fakeRepo) Get(ctx context.Context, userID uuid.UUID) (domain.Cart, error) {
@@ -29,6 +30,9 @@ func (f *fakeRepo) RemoveItem(ctx context.Context, userID, productID uuid.UUID) 
 }
 func (f *fakeRepo) Clear(ctx context.Context, userID uuid.UUID) error {
 	return f.clearFn(ctx, userID)
+}
+func (f *fakeRepo) SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error{
+	return f.setcartitemqtyFn(ctx,cartID, productID, qty)
 }
 
 func TestAddItem_Happy(t *testing.T) {
@@ -161,5 +165,33 @@ func TestGetCart_EmptyForNewUser(t *testing.T) {
 	}
 	if len(got.Items) != 0 {
 		t.Errorf("Items len = %d, want 0", len(got.Items))
+	}
+}
+
+func TestSetItemQuantity_Happy(t *testing.T) {
+	cartID, pid := uuid.New(), uuid.New()
+	repo := &fakeRepo{
+		setcartitemqtyFn: func(_ context.Context, c, p uuid.UUID, q int32) error {
+			if c != cartID || p != pid || q != 5 {
+				t.Errorf("repo got (%s, %s, %d)", c, p, q)
+			}
+			return nil
+		},
+	}
+	svc := NewService(repo)
+	if err := svc.SetItemQuantity(context.Background(), cartID, pid, 5); err != nil {
+		t.Fatalf("SetItemQuantity: %v", err)
+	}
+}
+
+func TestSetItemQuantity_InvalidQuantity(t *testing.T) {
+	svc := NewService(&fakeRepo{})
+	err := svc.SetItemQuantity(context.Background(), uuid.New(), uuid.New(), 0)
+	if !errors.Is(err, domain.ErrInvalidQuantity) {
+		t.Errorf("err = %v, want ErrInvalidQuantity", err)
+	}
+	err = svc.SetItemQuantity(context.Background(), uuid.New(), uuid.New(), -1)
+	if !errors.Is(err, domain.ErrInvalidQuantity) {
+		t.Errorf("err = %v, want ErrInvalidQuantity", err)
 	}
 }

@@ -18,6 +18,7 @@ type cartClient interface {
 	AddItem(ctx context.Context, in *cartv1.AddItemRequest, opts ...grpc.CallOption) (*cartv1.AddItemResponse, error)
 	RemoveItem(ctx context.Context, in *cartv1.RemoveItemRequest, opts ...grpc.CallOption) (*cartv1.RemoveItemResponse, error)
 	ClearCart(ctx context.Context, in *cartv1.ClearCartRequest, opts ...grpc.CallOption) (*cartv1.ClearCartResponse, error)
+	SetItemQuantity(ctx context.Context, in *cartv1.SetItemQuantityRequest, opts ...grpc.CallOption) (*cartv1.SetItemQuantityResponse, error)
 }
 
 type CartHandlers struct {
@@ -43,6 +44,10 @@ type cartJSON struct {
 type addItemRequest struct {
 	ProductID string `json:"product_id"`
 	Quantity  int32  `json:"quantity"`
+}
+
+type setItemQuantityRequest struct {
+	Quantity int32 `json:"quantity"`
 }
 
 func (h *CartHandlers) Get(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +111,30 @@ func (h *CartHandlers) Clear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.cart.ClearCart(r.Context(), &cartv1.ClearCartRequest{UserId: uid.String()}); err != nil {
+		writeUpstreamError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CartHandlers) SetItemQuantity(w http.ResponseWriter, r *http.Request) {
+	uid, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	productID := r.PathValue("product_id")
+	var req setItemQuantityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.Quantity < 0 {
+		http.Error(w, "quantity must be > 0", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := h.cart.SetItemQuantity(r.Context(), &cartv1.SetItemQuantityRequest{UserId: uid.String(), ProductId: productID, Quantity: req.Quantity}); err != nil {
 		writeUpstreamError(w, err)
 		return
 	}
