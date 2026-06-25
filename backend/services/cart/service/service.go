@@ -13,7 +13,7 @@ type Repo interface {
 	AddItem(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
 	RemoveItem(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
 	Clear(ctx context.Context, userID uuid.UUID) error
-	SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error
+	SetItemQuantity(ctx context.Context, userID, productID uuid.UUID, qty int32) error
 }
 
 type Service struct {
@@ -43,9 +43,9 @@ func (s *Service) ClearCart(ctx context.Context, userID uuid.UUID) error {
 	return s.repo.Clear(ctx, userID)
 }
 
-func (s *Service) SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error {
+func (s *Service) SetItemQuantity(ctx context.Context, userID, productID uuid.UUID, qty int32) error {
 	if qty <= 0 {
 		return domain.ErrInvalidQuantity
 	}
-	return s.repo.SetItemQuantity(ctx, cartID, productID, qty)
+	return s.repo.SetItemQuantity(ctx, userID, productID, qty)
 }

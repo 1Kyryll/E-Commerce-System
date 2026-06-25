@@ -131,32 +131,34 @@ func (r *Repo) Clear(ctx context.Context, userID uuid.UUID) error {
 	})
 }
 
-// SetItemQuantity updates the quantity of a product in the specified cart.
-//
-// if qty is 0, the item is removed from the cart.
-// returns an err if the cart item does not exist (the product is not in cart).
-func (r *Repo) SetItemQuantity(ctx context.Context, cartID, productID uuid.UUID, qty int32) error {
-	if qty < 0 {
-		return fmt.Errorf("cart-repo: SetItemQuantity: quantity cannot be negative")
-	}
-	if qty == 0 {
-		err := r.queries.RemoveCartItem(ctx, cartdb.RemoveCartItemParams{
-			CartID:    cartID,
+// SetItemQuantity sets the (product_id) line in the user's cart to an absolute
+// quantity in a single atomic UPDATE. The cart is resolved by user_id first,
+// mirroring RemoveItem/Clear. Returns domain.ErrProductNotFound if the user has
+// no cart or the product isn't in it. Callers must pass qty >= 1 (the service
+// rejects non-positive quantities before reaching here).
+func (r *Repo) SetItemQuantity(ctx context.Context, userID, productID uuid.UUID, qty int32) error {
+	return r.inTx(ctx, func(q *cartdb.Queries) error {
+		cart, err := q.GetCartByUserID(ctx, userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.ErrProductNotFound
+			}
+			return fmt.Errorf("get cart: %w", err)
+		}
+
+		rows, err := q.SetCartItemQuantity(ctx, cartdb.SetCartItemQuantityParams{
+			CartID:    cart.ID,
 			ProductID: productID,
+			Quantity:  qty,
 		})
 		if err != nil {
-			return fmt.Errorf("cart-repo: SetItemQuantity: %w", err)
+			return fmt.Errorf("set cart item quantity: %w", err)
+		}
+		if rows == 0 {
+			return domain.ErrProductNotFound
 		}
 		return nil
-	}
-	rowsAffected, err := r.queries.SetCartItemQuantity(ctx, cartdb.SetCartItemQuantityParams{CartID: cartID, ProductID: productID, Quantity: qty})
-	if err != nil {
-		return fmt.Errorf("cart-repo: SetItemQuantity: %w", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("cart-repo: SetItemQuantity: cart item not found")
-	}
-	return nil
+	})
 }
 
 // inTx opens a tx-bound *Queries, runs fn, and commits on nil. Any error

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,10 +16,10 @@ import (
 )
 
 type fakeSvc struct {
-	getFn    func(ctx context.Context, userID uuid.UUID) (domain.Cart, error)
-	addFn    func(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
-	removeFn func(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
-	clearFn  func(ctx context.Context, userID uuid.UUID) error
+	getFn            func(ctx context.Context, userID uuid.UUID) (domain.Cart, error)
+	addFn            func(ctx context.Context, userID, productID uuid.UUID, qty int32) (domain.Cart, error)
+	removeFn         func(ctx context.Context, userID, productID uuid.UUID) (domain.Cart, error)
+	clearFn          func(ctx context.Context, userID uuid.UUID) error
 	setcartitemqtyFn func(ctx context.Context, cartID, productID uuid.UUID, qty int32) error
 }
 

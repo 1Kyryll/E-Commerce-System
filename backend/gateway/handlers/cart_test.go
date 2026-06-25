@@ -22,6 +22,7 @@ type fakeCartClient struct {
 	addFn    func(ctx context.Context, in *cartv1.AddItemRequest, opts ...grpc.CallOption) (*cartv1.AddItemResponse, error)
 	removeFn func(ctx context.Context, in *cartv1.RemoveItemRequest, opts ...grpc.CallOption) (*cartv1.RemoveItemResponse, error)
 	clearFn  func(ctx context.Context, in *cartv1.ClearCartRequest, opts ...grpc.CallOption) (*cartv1.ClearCartResponse, error)
+	setQtyFn func(ctx context.Context, in *cartv1.SetItemQuantityRequest, opts ...grpc.CallOption) (*cartv1.SetItemQuantityResponse, error)
 }
 
 func (f *fakeCartClient) GetCart(ctx context.Context, in *cartv1.GetCartRequest, opts ...grpc.CallOption) (*cartv1.GetCartResponse, error) {
@@ -35,6 +36,9 @@ func (f *fakeCartClient) RemoveItem(ctx context.Context, in *cartv1.RemoveItemRe
 }
 func (f *fakeCartClient) ClearCart(ctx context.Context, in *cartv1.ClearCartRequest, opts ...grpc.CallOption) (*cartv1.ClearCartResponse, error) {
 	return f.clearFn(ctx, in, opts...)
+}
+func (f *fakeCartClient) SetItemQuantity(ctx context.Context, in *cartv1.SetItemQuantityRequest, opts ...grpc.CallOption) (*cartv1.SetItemQuantityResponse, error) {
+	return f.setQtyFn(ctx, in, opts...)
 }
 
 func withUserID(req *http.Request, uid uuid.UUID) *http.Request {
